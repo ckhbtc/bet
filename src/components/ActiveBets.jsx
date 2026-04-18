@@ -53,12 +53,19 @@ export default function ActiveBets({ bets, onCashOut }) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                   <CoinLogo symbol={bet.asset} size={32} />
                   <div>
-                    <div style={{ fontSize: 18, fontWeight: 700, fontFamily: 'var(--font-heading)' }}>
+                    <div style={{
+                      fontSize: 18, fontWeight: 700, fontFamily: 'var(--font-heading)',
+                      display: 'flex', alignItems: 'center', gap: 10,
+                    }}>
                       {bet.asset}
                       <span style={{
-                        fontSize: 12, fontWeight: 600, marginLeft: 8,
+                        fontSize: 13, fontWeight: 700,
+                        padding: '4px 10px', borderRadius: 6,
+                        background: bet.direction === 'up' ? 'var(--green-dim)' : 'var(--red-dim)',
                         color: bet.direction === 'up' ? 'var(--green)' : 'var(--red)',
+                        textTransform: 'uppercase', letterSpacing: 0.6,
                         fontFamily: 'var(--font-heading)',
+                        border: `1px solid ${bet.direction === 'up' ? 'var(--green)' : 'var(--red)'}`,
                       }}>
                         {bet.direction === 'up' ? 'Up' : 'Down'}
                       </span>

@@ -248,11 +248,21 @@ export default function App() {
                   padding: '8px 0', borderBottom: '1px solid var(--border)',
                 }}>
                   <div>
-                    <span style={{ fontSize: 13, fontWeight: 600 }}>
-                      {pos.direction === 'up' ? '🟢' : '🔴'} {pos.asset}
+                    <span style={{ fontSize: 13, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                      {pos.asset}
+                      <span style={{
+                        fontSize: 10, fontWeight: 700,
+                        padding: '2px 6px', borderRadius: 4,
+                        background: pos.direction === 'up' ? 'var(--green-dim)' : 'var(--red-dim)',
+                        color: pos.direction === 'up' ? 'var(--green)' : 'var(--red)',
+                        textTransform: 'uppercase', letterSpacing: 0.5,
+                        fontFamily: 'var(--font-heading)',
+                      }}>
+                        {pos.direction === 'up' ? 'Up' : 'Down'}
+                      </span>
                     </span>
                     <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                      ${pos.stake.toFixed(2)} margin
+                      ${pos.stake.toFixed(2)} amount
                     </div>
                   </div>
                   <span style={{
