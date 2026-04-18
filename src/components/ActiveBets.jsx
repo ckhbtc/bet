@@ -1,9 +1,9 @@
 import { formatDollar, formatPrice } from '../data/mockData';
 
 const STATUS_CONFIG = {
-  winning: { label: 'WINNING', bg: 'rgba(34, 197, 94, 0.1)', border: 'rgba(34, 197, 94, 0.3)', color: 'var(--green)' },
-  at_risk: { label: 'AT RISK', bg: 'rgba(239, 68, 68, 0.1)', border: 'rgba(239, 68, 68, 0.3)', color: 'var(--red)' },
-  close: { label: 'CLOSE', bg: 'rgba(245, 158, 11, 0.1)', border: 'rgba(245, 158, 11, 0.3)', color: 'var(--accent)' },
+  winning: { label: 'WINNING', bg: 'var(--green-dim)', border: 'var(--green)', color: 'var(--green)' },
+  at_risk: { label: 'AT RISK', bg: 'var(--red-dim)', border: 'var(--red)', color: 'var(--red)' },
+  close:   { label: 'CLOSE',   bg: 'var(--accent-dim)', border: 'var(--accent)', color: 'var(--accent)' },
 };
 
 export default function ActiveBets({ bets, onCashOut }) {
@@ -95,7 +95,7 @@ export default function ActiveBets({ bets, onCashOut }) {
                   onClick={() => onCashOut(bet)}
                   style={{
                     flex: 2,
-                    background: isPositive ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                    background: isPositive ? 'var(--green-dim)' : 'var(--red-dim)',
                     border: `1px solid ${isPositive ? 'var(--green)' : 'var(--red)'}`,
                     borderRadius: 8,
                     padding: '10px 0',

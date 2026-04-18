@@ -5,7 +5,7 @@ export default function ConfirmSheet({ bet, onConfirm, onEdit }) {
 
   return (
     <div style={{
-      position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.7)',
+      position: 'fixed', inset: 0, background: 'var(--overlay)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       zIndex: 200, backdropFilter: 'blur(4px)',
     }}>
@@ -40,9 +40,9 @@ export default function ConfirmSheet({ bet, onConfirm, onEdit }) {
         </div>
 
         <div style={{
-          background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)',
+          background: 'var(--red-dim)', border: '1px solid var(--red)',
           borderRadius: 8, padding: '10px 14px', marginBottom: 20,
-          fontSize: 12, color: '#f87171', textAlign: 'center',
+          fontSize: 12, color: 'var(--red)', textAlign: 'center',
         }}>
           Maximum loss: ${bet.stake} (your full bet)
         </div>
@@ -54,8 +54,8 @@ export default function ConfirmSheet({ bet, onConfirm, onEdit }) {
             fontSize: 14, fontWeight: 500, cursor: 'pointer', fontFamily: 'var(--font-heading)',
           }}>Edit</button>
           <button onClick={onConfirm} style={{
-            flex: 2, background: 'linear-gradient(135deg, #f59e0b, #f97316)',
-            border: 'none', borderRadius: 10, padding: '14px 0', color: '#000',
+            flex: 2, background: 'var(--accent-grad)',
+            border: 'none', borderRadius: 10, padding: '14px 0', color: 'var(--on-accent)',
             fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: 'var(--font-heading)',
           }}>Lock In Bet 🔒</button>
         </div>

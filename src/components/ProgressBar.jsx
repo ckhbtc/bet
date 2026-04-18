@@ -31,9 +31,7 @@ export default function ProgressBar({ entryPrice, targetPrice, currentPrice, dir
         <div style={{
           width: `${progress}%`,
           height: '100%',
-          background: isPositive
-            ? 'linear-gradient(90deg, #22c55e, #4ade80)'
-            : 'linear-gradient(90deg, #ef4444, #f87171)',
+          background: isPositive ? 'var(--green)' : 'var(--red)',
           borderRadius: 4,
           transition: 'width 0.5s ease',
         }} />

@@ -69,7 +69,7 @@ export default function BetPanel({ market, balance, onConfirm, onClose }) {
             onClick={() => setDirection(dir)}
             style={{
               background: direction === dir
-                ? (dir === 'up' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)')
+                ? (dir === 'up' ? 'var(--green-dim)' : 'var(--red-dim)')
                 : 'var(--bg-primary)',
               border: `2px solid ${direction === dir
                 ? (dir === 'up' ? 'var(--green)' : 'var(--red)')
@@ -116,7 +116,7 @@ export default function BetPanel({ market, balance, onConfirm, onClose }) {
               key={amt}
               onClick={() => handleStakeChange(amt)}
               style={{
-                flex: 1, background: stake === amt ? 'rgba(245, 158, 11, 0.15)' : 'var(--bg-primary)',
+                flex: 1, background: stake === amt ? 'var(--accent-dim)' : 'var(--bg-primary)',
                 border: `1px solid ${stake === amt ? 'var(--accent)' : 'var(--border)'}`,
                 borderRadius: 6, padding: '6px 0', color: stake === amt ? 'var(--accent)' : 'var(--text-muted)',
                 fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'var(--font-mono)',
@@ -187,9 +187,9 @@ export default function BetPanel({ market, balance, onConfirm, onClose }) {
       {/* Validation warnings */}
       {stake > balance && (
         <div style={{
-          background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)',
+          background: 'var(--red-dim)', border: '1px solid var(--red)',
           borderRadius: 8, padding: '8px 12px', marginBottom: 12,
-          fontSize: 12, color: '#f87171', textAlign: 'center',
+          fontSize: 12, color: 'var(--red)', textAlign: 'center',
         }}>
           Insufficient balance. You have ${balance.toLocaleString()}.
         </div>
@@ -209,8 +209,8 @@ export default function BetPanel({ market, balance, onConfirm, onClose }) {
         disabled={!canPlaceBet}
         style={{
           width: '100%',
-          background: canPlaceBet ? 'linear-gradient(135deg, #f59e0b, #f97316)' : 'var(--bg-primary)',
-          color: canPlaceBet ? '#000' : 'var(--text-muted)',
+          background: canPlaceBet ? 'var(--accent-grad)' : 'var(--bg-primary)',
+          color: canPlaceBet ? 'var(--on-accent)' : 'var(--text-muted)',
           border: canPlaceBet ? 'none' : '1px solid var(--border)',
           borderRadius: 10, padding: '16px 0',
           fontSize: 16, fontWeight: 700,

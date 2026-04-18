@@ -66,8 +66,8 @@ export default function MarketCard({ market, onPlaceBet }) {
           </div>
         </div>
         <button style={{
-          background: 'linear-gradient(135deg, #f59e0b, #f97316)',
-          color: '#000',
+          background: 'var(--accent-grad)',
+          color: 'var(--on-accent)',
           border: 'none',
           borderRadius: 8,
           padding: '8px 16px',

@@ -6,7 +6,7 @@ export default function BetResult({ bet, onPlaceAnother, onGoHome }) {
   return (
     <div style={{
       position: 'fixed', inset: 0,
-      background: isWin ? 'rgba(34, 197, 94, 0.05)' : 'rgba(239, 68, 68, 0.03)',
+      background: isWin ? 'var(--green-dim)' : 'var(--red-dim)',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       zIndex: 200,
     }}>
@@ -103,8 +103,8 @@ export default function BetResult({ bet, onPlaceAnother, onGoHome }) {
             >Share Win</button>
           )}
           <button onClick={onPlaceAnother} style={{
-            flex: 1, background: 'linear-gradient(135deg, #f59e0b, #f97316)',
-            border: 'none', borderRadius: 10, padding: '12px 0', color: '#000',
+            flex: 1, background: 'var(--accent-grad)',
+            border: 'none', borderRadius: 10, padding: '12px 0', color: 'var(--on-accent)',
             fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-heading)',
           }}>Bet Again</button>
         </div>
