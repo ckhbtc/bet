@@ -12,9 +12,9 @@ export const LEADERBOARD_FEED = [
 
 
 export const AGGRESSIVENESS = {
-  CHILL: { leverage: 2, label: 'Chill', desc: 'Small price move wins', color: '#4a9eff' },
+  CHILL: { leverage: 2, label: 'Chill', desc: 'Big swing required', color: '#4a9eff' },
   BALANCED: { leverage: 10, label: 'Balanced', desc: 'Moderate move needed', color: '#f59e0b' },
-  DEGEN: { leverage: 25, label: 'Degen', desc: 'Big swing required', color: '#ef4444' },
+  DEGEN: { leverage: 25, label: 'Degen', desc: 'Small price move wins', color: '#ef4444' },
 };
 
 export function formatPrice(price) {
