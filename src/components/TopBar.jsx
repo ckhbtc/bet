@@ -23,7 +23,7 @@ export default function TopBar({ onNavigate, currentView, theme, onToggleTheme }
             alt="INJ Bet"
             width={28}
             height={28}
-            style={{ width: 28, height: 28, display: 'block' }}
+            style={{ width: 28, height: 28, display: 'block', borderRadius: '50%' }}
           />
           <span style={{
             fontSize: 16, fontWeight: 700, letterSpacing: -0.5,
