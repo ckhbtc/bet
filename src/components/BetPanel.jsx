@@ -6,13 +6,17 @@ const QUICK_STAKES = [10, 25, 50, 100, 250];
 
 export default function BetPanel({ market, balance, onConfirm, onClose }) {
   const [direction, setDirection] = useState('up');
-  const [stake, setStake] = useState(50);
-  const [winTarget, setWinTarget] = useState(100);
+  // Kept as strings so the input can be truly empty while typing;
+  // numeric operations use the *Num derived values below.
+  const [stake, setStake] = useState('50');
+  const [winTarget, setWinTarget] = useState('100');
   const [aggr, setAggr] = useState('BALANCED');
 
   const aggrConfig = AGGRESSIVENESS[aggr];
-  const safeStake = Math.max(1, stake);
-  const safeWinTarget = Math.max(1, winTarget);
+  const stakeNum = Number(stake) || 0;
+  const winTargetNum = Number(winTarget) || 0;
+  const safeStake = Math.max(1, stakeNum);
+  const safeWinTarget = Math.max(1, winTargetNum);
 
   const targetPrice = useMemo(() => {
     const lev = aggrConfig.leverage;
@@ -29,14 +33,25 @@ export default function BetPanel({ market, balance, onConfirm, onClose }) {
     mmr: Number(market.maintenanceMarginRatio) || 0.025,
   }), [market.price, market.maintenanceMarginRatio, aggrConfig.leverage, direction]);
 
-  const handleStakeChange = (val) => {
-    const clamped = Math.max(0, Math.floor(val));
-    setStake(clamped);
-    setWinTarget(Math.max(1, clamped * 2));
+  const sanitizeIntInput = (raw) => raw.replace(/[^0-9]/g, '').replace(/^0+(?=\d)/, '');
+
+  const handleStakeInput = (raw) => {
+    const clean = sanitizeIntInput(raw);
+    setStake(clean);
+    // Auto-suggest 2× win target while the user is typing the stake, but don't
+    // clobber a target they've already set meaningfully different from 2×.
+    if (clean !== '') setWinTarget(String(Number(clean) * 2));
+    else setWinTarget('');
   };
 
-  const handleWinTargetChange = (val) => {
-    setWinTarget(Math.max(0, Math.floor(val)));
+  const handleStakeButton = (val) => {
+    const clamped = Math.max(0, Math.floor(val));
+    setStake(String(clamped));
+    setWinTarget(String(Math.max(1, clamped * 2)));
+  };
+
+  const handleWinTargetInput = (raw) => {
+    setWinTarget(sanitizeIntInput(raw));
   };
 
   // Short positions whose required move >= 100% would need price to hit zero
@@ -45,7 +60,7 @@ export default function BetPanel({ market, balance, onConfirm, onClose }) {
   const requiredMove = safeWinTarget / (safeStake * aggrConfig.leverage);
   const unreachable = direction === 'down' ? requiredMove >= 1 : false;
 
-  const canPlaceBet = stake >= 1 && winTarget >= 1 && stake <= balance
+  const canPlaceBet = stakeNum >= 1 && winTargetNum >= 1 && stakeNum <= balance
     && !isNaN(targetPrice) && targetPrice > 0 && !unreachable;
 
   return (
@@ -117,7 +132,7 @@ export default function BetPanel({ market, balance, onConfirm, onClose }) {
               }}>
                 {dir === 'up' ? '↑' : '↓'}
               </span>
-              <span>{market.symbol} {dir === 'up' ? 'Up' : 'Down'}</span>
+              <span>{dir === 'up' ? 'Up' : 'Down'}</span>
             </button>
           );
         })}
@@ -135,9 +150,11 @@ export default function BetPanel({ market, balance, onConfirm, onClose }) {
             fontSize: 20, fontWeight: 600, color: 'var(--text-muted)',
           }}>$</span>
           <input
-            type="number"
+            type="text"
+            inputMode="numeric"
             value={stake}
-            onChange={e => handleStakeChange(Number(e.target.value))}
+            onChange={e => handleStakeInput(e.target.value)}
+            placeholder="0"
             style={{
               width: '100%', background: 'var(--bg-primary)', border: '1px solid var(--border)',
               borderRadius: 10, padding: '14px 14px 14px 32px', color: 'var(--text-primary)',
@@ -149,11 +166,11 @@ export default function BetPanel({ market, balance, onConfirm, onClose }) {
           {QUICK_STAKES.map(amt => (
             <button
               key={amt}
-              onClick={() => handleStakeChange(amt)}
+              onClick={() => handleStakeButton(amt)}
               style={{
-                flex: 1, background: stake === amt ? 'var(--accent-dim)' : 'var(--bg-primary)',
-                border: `1px solid ${stake === amt ? 'var(--accent)' : 'var(--border)'}`,
-                borderRadius: 6, padding: '6px 0', color: stake === amt ? 'var(--accent)' : 'var(--text-muted)',
+                flex: 1, background: stakeNum === amt ? 'var(--accent-dim)' : 'var(--bg-primary)',
+                border: `1px solid ${stakeNum === amt ? 'var(--accent)' : 'var(--border)'}`,
+                borderRadius: 6, padding: '6px 0', color: stakeNum === amt ? 'var(--accent)' : 'var(--text-muted)',
                 fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'var(--font-mono)',
               }}
             >${amt}</button>
@@ -173,9 +190,11 @@ export default function BetPanel({ market, balance, onConfirm, onClose }) {
             fontSize: 20, fontWeight: 600, color: 'var(--text-muted)',
           }}>$</span>
           <input
-            type="number"
+            type="text"
+            inputMode="numeric"
             value={winTarget}
-            onChange={e => handleWinTargetChange(Number(e.target.value))}
+            onChange={e => handleWinTargetInput(e.target.value)}
+            placeholder="0"
             style={{
               width: '100%', background: 'var(--bg-primary)', border: '1px solid var(--border)',
               borderRadius: 10, padding: '14px 14px 14px 32px', color: 'var(--green)',
@@ -245,7 +264,7 @@ export default function BetPanel({ market, balance, onConfirm, onClose }) {
       )}
 
       {/* Validation warnings */}
-      {stake > balance && (
+      {stakeNum > balance && (
         <div style={{
           background: 'var(--red-dim)', border: '1px solid var(--red)',
           borderRadius: 8, padding: '8px 12px', marginBottom: 12,
@@ -267,13 +286,13 @@ export default function BetPanel({ market, balance, onConfirm, onClose }) {
           </span>{' '}before{' '}
           <span style={{ color: 'var(--green)', fontFamily: 'var(--font-mono)' }}>
             ${formatPrice(targetPrice)}
-          </span>, you may lose your ${stake} margin.
+          </span>, you may lose your ${stakeNum} bet.
         </div>
       )}
 
       {/* CTA */}
       <button
-        onClick={() => canPlaceBet && onConfirm({ market, direction, stake, winTarget, aggr, targetPrice, liqPrice })}
+        onClick={() => canPlaceBet && onConfirm({ market, direction, stake: stakeNum, winTarget: winTargetNum, aggr, targetPrice, liqPrice })}
         disabled={!canPlaceBet}
         style={{
           width: '100%',
