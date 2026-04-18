@@ -148,6 +148,12 @@ export default function App() {
       }}>
         {/* Main content */}
         <div style={{ flex: 1, minWidth: 0 }}>
+          {connected && !session.active && !selectedMarket && (
+            <div style={{ marginBottom: 24 }}>
+              <AuthZSetup />
+            </div>
+          )}
+
           {view === 'home' && !selectedMarket && (
             <>
               <div style={{ marginBottom: 24 }}>
