@@ -1,4 +1,10 @@
 import { useState, useCallback, useEffect } from 'react';
+
+const readInitialTheme = () => {
+  if (typeof document === 'undefined') return 'dark';
+  const attr = document.documentElement.dataset.theme;
+  return attr === 'light' || attr === 'dark' ? attr : 'dark';
+};
 import TopBar from './components/TopBar';
 import MarketCard from './components/MarketCard';
 import BetPanel from './components/BetPanel';
@@ -16,6 +22,17 @@ export default function App() {
   const [pendingBet, setPendingBet] = useState(null);
   const [showResult, setShowResult] = useState(null);
   const [txStatus, setTxStatus] = useState(null); // { type: 'loading'|'success'|'error', message }
+  const [theme, setTheme] = useState(readInitialTheme);
+
+  // Sync theme to <html data-theme> + localStorage
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    try { localStorage.setItem('bet-theme', theme); } catch { /* ignore */ }
+  }, [theme]);
+
+  const toggleTheme = useCallback(() => {
+    setTheme(t => t === 'dark' ? 'light' : 'dark');
+  }, []);
 
   const { connected, injAddress, usdtBalance, refreshBalances } = useWalletStore();
   const { markets, positions, loading, startPolling, stopPolling } = useMarketStore();
@@ -109,7 +126,7 @@ export default function App() {
 
   return (
     <>
-      <TopBar onNavigate={setView} currentView={view} />
+      <TopBar onNavigate={setView} currentView={view} theme={theme} onToggleTheme={toggleTheme} />
 
       {/* Transaction status toast */}
       {txStatus && (
@@ -117,8 +134,8 @@ export default function App() {
           position: 'fixed', top: 70, left: '50%', transform: 'translateX(-50%)',
           zIndex: 300, padding: '12px 24px', borderRadius: 10,
           background: txStatus.type === 'loading' ? 'var(--bg-card)'
-            : txStatus.type === 'success' ? 'rgba(34, 197, 94, 0.15)'
-            : 'rgba(239, 68, 68, 0.15)',
+            : txStatus.type === 'success' ? 'var(--green-dim)'
+            : 'var(--red-dim)',
           border: `1px solid ${txStatus.type === 'loading' ? 'var(--border)'
             : txStatus.type === 'success' ? 'var(--green)'
             : 'var(--red)'}`,
@@ -187,9 +204,9 @@ export default function App() {
                   <button
                     onClick={() => useWalletStore.getState().connect()}
                     style={{
-                      background: 'linear-gradient(135deg, #f59e0b, #f97316)',
+                      background: 'var(--accent-grad)',
                       border: 'none', borderRadius: 10, padding: '14px 28px',
-                      color: '#000', fontSize: 14, fontWeight: 600, cursor: 'pointer',
+                      color: 'var(--on-accent)', fontSize: 14, fontWeight: 600, cursor: 'pointer',
                       fontFamily: 'var(--font-heading)',
                     }}
                   >Connect Wallet</button>

@@ -1,6 +1,6 @@
 import useWalletStore from '../stores/walletStore';
 
-export default function TopBar({ onNavigate, currentView }) {
+export default function TopBar({ onNavigate, currentView, theme, onToggleTheme }) {
   const { connected, connecting, ethAddress, injAddress, usdtBalance, connect, error } = useWalletStore();
 
   return (
@@ -20,9 +20,9 @@ export default function TopBar({ onNavigate, currentView }) {
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }} onClick={() => onNavigate('home')}>
           <div style={{
             width: 28, height: 28, borderRadius: '50%',
-            background: 'linear-gradient(135deg, #f59e0b, #f97316)',
+            background: 'var(--accent-grad)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 14, fontWeight: 700, color: '#000',
+            fontSize: 14, fontWeight: 700, color: 'var(--on-accent)',
           }}>I</div>
           <span style={{
             fontSize: 16, fontWeight: 700, letterSpacing: -0.5,
@@ -39,7 +39,7 @@ export default function TopBar({ onNavigate, currentView }) {
               key={item.id}
               onClick={() => onNavigate(item.id)}
               style={{
-                background: currentView === item.id ? 'rgba(245, 158, 11, 0.1)' : 'transparent',
+                background: currentView === item.id ? 'var(--accent-dim)' : 'transparent',
                 color: currentView === item.id ? 'var(--accent)' : 'var(--text-secondary)',
                 border: 'none',
                 borderRadius: 6,
@@ -56,6 +56,17 @@ export default function TopBar({ onNavigate, currentView }) {
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <button
+          className="theme-toggle"
+          onClick={onToggleTheme}
+          aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+          title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
+        >
+          <span className="theme-toggle-thumb">
+            <span className="icon-sun">☀</span>
+            <span className="icon-moon">☾</span>
+          </span>
+        </button>
         {connected ? (
           <>
             <div style={{
@@ -73,7 +84,7 @@ export default function TopBar({ onNavigate, currentView }) {
             <div
               title={injAddress}
               style={{
-                background: 'linear-gradient(135deg, #4a9eff, #6366f1)',
+                background: 'var(--blue-grad)',
                 borderRadius: 8,
                 padding: '6px 12px',
                 display: 'flex', alignItems: 'center', gap: 6,
@@ -91,7 +102,7 @@ export default function TopBar({ onNavigate, currentView }) {
             disabled={connecting}
             style={{
               background: connecting ? 'var(--bg-primary)' : 'linear-gradient(135deg, #f59e0b, #f97316)',
-              color: connecting ? 'var(--text-muted)' : '#000',
+              color: connecting ? 'var(--text-muted)' : 'var(--on-accent)',
               border: connecting ? '1px solid var(--border)' : 'none',
               borderRadius: 8,
               padding: '8px 20px',
