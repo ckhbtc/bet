@@ -33,4 +33,5 @@ export const api = {
   sessionDeactivate: () => call('/session/deactivate', { method: 'POST', auth: true }),
   tradeOpen: (payload) => call('/trade/open', { method: 'POST', body: payload, auth: true }),
   tradeClose: (payload) => call('/trade/close', { method: 'POST', body: payload, auth: true }),
+  initAccount: (wallet) => call('/init-account', { method: 'POST', body: { wallet } }),
 };

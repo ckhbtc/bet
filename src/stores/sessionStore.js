@@ -31,7 +31,8 @@ const useSessionStore = create((set, get) => ({
 
   grant: async ({ injAddress, ethAddress }) => {
     set({ granting: true, error: null, status: '' });
-    try {
+
+    const runGrant = async () => {
       const result = await grantAuthZ(injAddress, (msg) => set({ status: msg }));
       const resp = await api.activate({
         privateKeyHex: result.privateKeyHex,
@@ -49,8 +50,30 @@ const useSessionStore = create((set, get) => ({
         granting: false,
         status: 'Autosign active.',
       });
+    };
+
+    try {
+      await runGrant();
     } catch (err) {
-      set({ granting: false, error: err.message, status: '' });
+      const msg = err?.message || '';
+      // Fresh wallet — no on-chain account yet. Faucet a tiny INJ, wait for
+      // block inclusion, then retry the grant once.
+      const needsFaucet = (msg.includes('not found') && msg.toLowerCase().includes('account'))
+        || msg.toLowerCase().includes('insufficient funds');
+      if (needsFaucet) {
+        try {
+          set({ status: 'New wallet detected — initializing your account...' });
+          await api.initAccount(injAddress);
+          set({ status: 'Account funded — retrying authorization...' });
+          await new Promise(r => setTimeout(r, 5000));
+          await runGrant();
+          return;
+        } catch (retryErr) {
+          set({ granting: false, error: retryErr.message, status: '' });
+          throw retryErr;
+        }
+      }
+      set({ granting: false, error: msg, status: '' });
       throw err;
     }
   },
