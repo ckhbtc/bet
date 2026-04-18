@@ -7,6 +7,7 @@
 import {
   MsgCreateDerivativeMarketOrder,
   MsgCreateDerivativeLimitOrder,
+  MsgCancelDerivativeOrder,
   MsgAuthzExec,
   MsgBroadcasterWithPk,
   OrderTypeMap,
@@ -221,7 +222,7 @@ export async function executeClose({
 
   const subaccountId = Address.fromHex(session.ethAddress).getSubaccountId(0);
 
-  const msg = MsgCreateDerivativeMarketOrder.fromJSON({
+  const closeMsg = MsgCreateDerivativeMarketOrder.fromJSON({
     marketId: market.marketId,
     subaccountId,
     injectiveAddress: session.granterAddress,
@@ -232,7 +233,26 @@ export async function executeClose({
     feeRecipient: session.granterAddress,
   });
 
-  return broadcastViaAuthz([msg], session);
+  // Cancel any reduce-only limit orders on this market+subaccount so we don't
+  // leave an orphaned TP parked after the position closes.
+  const cancelMsgs = [];
+  try {
+    const { orders } = await derivativesApi.fetchOrders({ subaccountId, marketId: market.marketId });
+    for (const o of orders || []) {
+      const isReduceOnly = String(o.margin || '0') === '0';
+      if (!isReduceOnly || !o.orderHash) continue;
+      cancelMsgs.push(MsgCancelDerivativeOrder.fromJSON({
+        injectiveAddress: session.granterAddress,
+        marketId: market.marketId,
+        subaccountId,
+        orderHash: o.orderHash,
+      }));
+    }
+  } catch {
+    // Non-fatal — close still proceeds even if order lookup fails.
+  }
+
+  return broadcastViaAuthz([closeMsg, ...cancelMsgs], session);
 }
 
 // ─── Broadcast via AuthZ + fee delegation ──────────────────────────────────
