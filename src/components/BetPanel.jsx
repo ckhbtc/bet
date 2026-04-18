@@ -87,32 +87,40 @@ export default function BetPanel({ market, balance, onConfirm, onClose }) {
 
       {/* Direction toggle */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 20 }}>
-        {['up', 'down'].map(dir => (
-          <button
-            key={dir}
-            onClick={() => setDirection(dir)}
-            style={{
-              background: direction === dir
-                ? (dir === 'up' ? 'var(--green-dim)' : 'var(--red-dim)')
-                : 'var(--bg-primary)',
-              border: `2px solid ${direction === dir
-                ? (dir === 'up' ? 'var(--green)' : 'var(--red)')
-                : 'var(--border)'}`,
-              borderRadius: 10,
-              padding: '14px 16px',
-              cursor: 'pointer',
-              color: direction === dir
-                ? (dir === 'up' ? 'var(--green)' : 'var(--red)')
-                : 'var(--text-muted)',
-              fontSize: 15,
-              fontWeight: 600,
-              fontFamily: 'var(--font-heading)',
-              transition: 'all 0.15s',
-            }}
-          >
-            {dir === 'up' ? `🟢 ${market.symbol} Goes Up` : `🔴 ${market.symbol} Goes Down`}
-          </button>
-        ))}
+        {['up', 'down'].map(dir => {
+          const active = direction === dir;
+          const color = dir === 'up' ? 'var(--green)' : 'var(--red)';
+          return (
+            <button
+              key={dir}
+              onClick={() => setDirection(dir)}
+              style={{
+                background: active
+                  ? (dir === 'up' ? 'var(--green-dim)' : 'var(--red-dim)')
+                  : 'var(--bg-primary)',
+                border: `2px solid ${active ? color : 'var(--border)'}`,
+                borderRadius: 10,
+                padding: '14px 16px',
+                cursor: 'pointer',
+                color: active ? color : 'var(--text-muted)',
+                fontSize: 15,
+                fontWeight: 600,
+                fontFamily: 'var(--font-heading)',
+                transition: 'all 0.15s',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+              }}
+            >
+              <span style={{
+                fontSize: 20, fontWeight: 800, lineHeight: 1,
+                fontFamily: 'var(--font-mono)',
+                color: active ? color : 'var(--text-muted)',
+              }}>
+                {dir === 'up' ? '↑' : '↓'}
+              </span>
+              <span>{market.symbol} {dir === 'up' ? 'Up' : 'Down'}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* Stake */}
