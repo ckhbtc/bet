@@ -47,9 +47,19 @@ export default function BetPanel({ market, balance, onConfirm, onClose }) {
       {/* Asset header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <div>
-          <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 2, marginBottom: 2 }}>Betting on</div>
-          <div style={{ fontSize: 24, fontWeight: 700 }}>{market.symbol}</div>
-          <div style={{ fontSize: 16, fontFamily: 'var(--font-mono)', color: 'var(--text-secondary)' }}>${formatPrice(market.price)}</div>
+          <div style={{
+            fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)',
+            textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 4,
+          }}>Betting on</div>
+          <div style={{
+            fontSize: 22, fontWeight: 700, letterSpacing: -0.3,
+            fontFamily: 'var(--font-heading)', lineHeight: 1.1,
+          }}>{market.symbol}</div>
+          <div style={{
+            fontSize: 22, fontWeight: 700, letterSpacing: -0.5,
+            fontFamily: 'var(--font-heading)', color: 'var(--text-secondary)',
+            fontVariantNumeric: 'tabular-nums', marginTop: 4,
+          }}>${formatPrice(market.price)}</div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
           <Sparkline data={market.sparkline} width={100} height={40} color={market.change24h >= 0 ? 'var(--green)' : 'var(--red)'} />
@@ -176,10 +186,17 @@ export default function BetPanel({ market, balance, onConfirm, onClose }) {
         background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 8,
         padding: '12px 16px', marginBottom: 12, textAlign: 'center',
       }}>
-        <div style={{ fontSize: 11, color: 'var(--text-muted)', marginBottom: 4 }}>
+        <div style={{
+          fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)',
+          textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 4,
+        }}>
           {market.symbol} needs to reach
         </div>
-        <div style={{ fontSize: 18, fontWeight: 700, fontFamily: 'var(--font-mono)', color: 'var(--accent)' }}>
+        <div style={{
+          fontSize: 22, fontWeight: 700, fontFamily: 'var(--font-heading)',
+          letterSpacing: -0.5, color: 'var(--accent)',
+          fontVariantNumeric: 'tabular-nums',
+        }}>
           ${formatPrice(targetPrice)}
         </div>
       </div>
