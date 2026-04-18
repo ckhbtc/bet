@@ -27,3 +27,12 @@ export function formatDollar(amount) {
   const sign = amount >= 0 ? '+' : '';
   return `${sign}$${Math.abs(amount).toFixed(2)}`;
 }
+
+// Cross-margin perpetual liquidation price.
+// long:  entry * (1 - 1/lev + MMR)
+// short: entry * (1 + 1/lev - MMR)
+export function liquidationPrice({ entryPrice, leverage, direction, mmr = 0.025 }) {
+  if (!entryPrice || !leverage) return null;
+  const dirSign = direction === 'up' || direction === 'long' ? 1 : -1;
+  return entryPrice * (1 - dirSign * (1 / leverage - mmr));
+}

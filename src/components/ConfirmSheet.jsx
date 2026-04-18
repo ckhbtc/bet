@@ -42,9 +42,13 @@ export default function ConfirmSheet({ bet, onConfirm, onEdit }) {
         <div style={{
           background: 'var(--red-dim)', border: '1px solid var(--red)',
           borderRadius: 8, padding: '10px 14px', marginBottom: 20,
-          fontSize: 12, color: 'var(--red)', textAlign: 'center',
+          fontSize: 12, color: 'var(--red)', textAlign: 'center', lineHeight: 1.5,
         }}>
-          Maximum loss: ${bet.stake} (your full bet)
+          If {bet.market.symbol} reaches{' '}
+          <span style={{ fontFamily: 'var(--font-mono)' }}>${formatPrice(bet.liqPrice)}</span>{' '}
+          before{' '}
+          <span style={{ fontFamily: 'var(--font-mono)' }}>${formatPrice(bet.targetPrice)}</span>,
+          you may lose your ${bet.stake} margin.
         </div>
 
         <div style={{ display: 'flex', gap: 8 }}>

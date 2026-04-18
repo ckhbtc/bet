@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import Sparkline from './Sparkline';
-import { formatPrice, AGGRESSIVENESS } from '../data/mockData';
+import { formatPrice, AGGRESSIVENESS, liquidationPrice } from '../data/mockData';
 
 const QUICK_STAKES = [10, 25, 50, 100, 250];
 
@@ -21,6 +21,13 @@ export default function BetPanel({ market, balance, onConfirm, onClose }) {
     }
     return market.price * (1 - (safeWinTarget / (safeStake * lev)));
   }, [market.price, safeStake, safeWinTarget, aggrConfig.leverage, direction]);
+
+  const liqPrice = useMemo(() => liquidationPrice({
+    entryPrice: market.price,
+    leverage: aggrConfig.leverage,
+    direction,
+    mmr: Number(market.maintenanceMarginRatio) || 0.025,
+  }), [market.price, market.maintenanceMarginRatio, aggrConfig.leverage, direction]);
 
   const handleStakeChange = (val) => {
     const clamped = Math.max(0, Math.floor(val));
@@ -217,12 +224,18 @@ export default function BetPanel({ market, balance, onConfirm, onClose }) {
         fontSize: 12, color: 'var(--text-muted)', textAlign: 'center',
         marginBottom: 16, lineHeight: 1.6,
       }}>
-        If {market.symbol} doesn't reach ${formatPrice(targetPrice)}, you lose your ${stake} bet.
+        If {market.symbol} reaches{' '}
+        <span style={{ color: 'var(--red)', fontFamily: 'var(--font-mono)' }}>
+          ${formatPrice(liqPrice)}
+        </span>{' '}before{' '}
+        <span style={{ color: 'var(--green)', fontFamily: 'var(--font-mono)' }}>
+          ${formatPrice(targetPrice)}
+        </span>, you may lose your ${stake} margin.
       </div>
 
       {/* CTA */}
       <button
-        onClick={() => canPlaceBet && onConfirm({ market, direction, stake, winTarget, aggr, targetPrice })}
+        onClick={() => canPlaceBet && onConfirm({ market, direction, stake, winTarget, aggr, targetPrice, liqPrice })}
         disabled={!canPlaceBet}
         style={{
           width: '100%',
