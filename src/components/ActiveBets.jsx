@@ -1,4 +1,5 @@
-import { formatDollar, formatPrice } from '../data/mockData';
+import { formatDollar, formatPrice, liquidationPrice } from '../data/mockData';
+import ProgressBar from './ProgressBar';
 
 const STATUS_CONFIG = {
   winning: { label: 'WINNING', bg: 'var(--green-dim)', border: 'var(--green)', color: 'var(--green)' },
@@ -77,7 +78,7 @@ export default function ActiveBets({ bets, onCashOut }) {
               {/* Price info */}
               <div style={{
                 display: 'flex', justifyContent: 'space-between',
-                marginBottom: 16, fontSize: 12, fontFamily: 'var(--font-mono)',
+                marginBottom: 12, fontSize: 12, fontFamily: 'var(--font-mono)',
               }}>
                 <div>
                   <span style={{ color: 'var(--text-muted)' }}>Entry </span>
@@ -88,6 +89,34 @@ export default function ActiveBets({ bets, onCashOut }) {
                   <span style={{ color: isPositive ? 'var(--green)' : 'var(--red)' }}>${formatPrice(bet.markPrice || bet.currentPrice)}</span>
                 </div>
               </div>
+
+              {/* Liq ←→ TP progress */}
+              {(() => {
+                const lev = (bet.entryPrice && bet.margin && Number(bet.quantity))
+                  ? (bet.entryPrice * Number(bet.quantity)) / bet.margin
+                  : null;
+                const fallbackLiq = (lev && bet.entryPrice)
+                  ? liquidationPrice({
+                      entryPrice: bet.entryPrice,
+                      leverage: lev,
+                      direction: bet.direction,
+                      mmr: Number(bet.market?.maintenanceMarginRatio) || 0.025,
+                    })
+                  : null;
+                const liq = bet.liqPrice && bet.liqPrice > 0 ? bet.liqPrice : fallbackLiq;
+                const tp = bet.tpPrice;
+                if (!liq || !tp) return null;
+                return (
+                  <div style={{ marginBottom: 16 }}>
+                    <ProgressBar
+                      liqPrice={liq}
+                      tpPrice={tp}
+                      markPrice={bet.markPrice || bet.currentPrice}
+                      direction={bet.direction}
+                    />
+                  </div>
+                );
+              })()}
 
               {/* Actions */}
               <div style={{ display: 'flex', gap: 8 }}>

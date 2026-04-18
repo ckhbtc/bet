@@ -7,6 +7,7 @@ import {
   IndexerGrpcDerivativesApi,
   IndexerGrpcOracleApi,
   IndexerGrpcAccountPortfolioApi,
+  Address,
 } from '@injectivelabs/sdk-ts';
 import { getNetworkEndpoints, Network } from '@injectivelabs/networks';
 import Decimal from 'decimal.js';
@@ -181,22 +182,45 @@ export async function fetchPositions(injAddress) {
   const markets = await listMarkets();
   const marketMap = new Map(markets.map(m => [m.marketId, m]));
 
-  const { positions } = await derivativesApi.fetchPositionsV2({ address: injAddress });
+  const [posRes, ordersRes] = await Promise.all([
+    derivativesApi.fetchPositionsV2({ address: injAddress }),
+    fetchOpenOrders(injAddress).catch(() => ({ orders: [] })),
+  ]);
+
+  const SCALE = new Decimal(10).pow(USDT_DECIMALS);
+
+  // Index reduce-only limit orders by marketId so we can attach TPs per position.
+  const tpByMarket = new Map();
+  for (const o of ordersRes.orders || []) {
+    const isReduceOnly = String(o.margin || '0') === '0';
+    if (!isReduceOnly) continue;
+    const orderPrice = new Decimal(o.price).div(SCALE).toNumber();
+    const list = tpByMarket.get(o.marketId) || [];
+    list.push({ price: orderPrice, side: o.orderSide, quantity: o.quantity });
+    tpByMarket.set(o.marketId, list);
+  }
 
   const result = [];
-  for (const p of positions || []) {
+  for (const p of posRes.positions || []) {
     const market = marketMap.get(p.marketId);
     const side = p.direction === 'long' ? 'long' : 'short';
 
-    const SCALE = new Decimal(10).pow(USDT_DECIMALS);
     const entryPrice = new Decimal(p.entryPrice).div(SCALE);
     const markPrice = new Decimal(p.markPrice || p.entryPrice).div(SCALE);
     const quantity = new Decimal(p.quantity);
     const margin = new Decimal(p.margin).div(SCALE);
+    const liqPrice = p.liquidationPrice
+      ? new Decimal(p.liquidationPrice).div(SCALE).toNumber()
+      : null;
 
     const dir = side === 'long' ? 1 : -1;
     const pnl = markPrice.minus(entryPrice).mul(quantity).mul(dir);
     const pnlPct = margin.gt(0) ? pnl.div(margin).mul(100) : new Decimal(0);
+
+    // TP for a long is a SELL reduce-only above entry; for a short, a BUY below.
+    const candidates = tpByMarket.get(p.marketId) || [];
+    const wantedSide = side === 'long' ? 'sell' : 'buy';
+    const tpOrder = candidates.find(c => String(c.side).toLowerCase() === wantedSide);
 
     result.push({
       symbol: market?.symbol || p.marketId.slice(0, 6),
@@ -209,9 +233,10 @@ export async function fetchPositions(injAddress) {
       entryPrice: entryPrice.toNumber(),
       markPrice: markPrice.toNumber(),
       margin: margin.toNumber(),
+      liqPrice,
+      tpPrice: tpOrder ? tpOrder.price : null,
       pnl: pnl.toNumber(),
       pnlPct: pnlPct.toNumber(),
-      // Map to existing UI fields
       stake: margin.toNumber(),
       currentPrice: markPrice.toNumber(),
       asset: market?.symbol || p.marketId.slice(0, 6),
@@ -220,4 +245,12 @@ export async function fetchPositions(injAddress) {
     });
   }
   return result;
+}
+
+// ─── Open orders (used to surface TP per position) ────────────────────────────
+
+async function fetchOpenOrders(injAddress) {
+  const ethAddress = Address.fromBech32(injAddress).toHex();
+  const subaccountId = Address.fromHex(ethAddress).getSubaccountId(0);
+  return derivativesApi.fetchOrders({ subaccountId });
 }
