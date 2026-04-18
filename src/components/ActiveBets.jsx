@@ -104,8 +104,14 @@ export default function ActiveBets({ bets, onCashOut }) {
                     })
                   : null;
                 const liq = bet.liqPrice && bet.liqPrice > 0 ? bet.liqPrice : fallbackLiq;
-                const tp = bet.tpPrice;
-                if (!liq || !tp) return null;
+                if (!liq || !bet.entryPrice) return null;
+                // Mirror liq distance around entry as a default upside bound when
+                // there's no on-chain TP (e.g. positions opened before TP support).
+                const isLong = bet.direction === 'up' || bet.direction === 'long';
+                const mirrorTp = isLong
+                  ? bet.entryPrice + (bet.entryPrice - liq)
+                  : bet.entryPrice - (liq - bet.entryPrice);
+                const tp = bet.tpPrice && bet.tpPrice > 0 ? bet.tpPrice : mirrorTp;
                 return (
                   <div style={{ marginBottom: 16 }}>
                     <ProgressBar
@@ -113,6 +119,7 @@ export default function ActiveBets({ bets, onCashOut }) {
                       tpPrice={tp}
                       markPrice={bet.markPrice || bet.currentPrice}
                       direction={bet.direction}
+                      tpIsImplicit={!bet.tpPrice || bet.tpPrice <= 0}
                     />
                   </div>
                 );
