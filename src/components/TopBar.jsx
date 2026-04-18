@@ -1,7 +1,7 @@
 import useWalletStore from '../stores/walletStore';
 
 export default function TopBar({ onNavigate, currentView, theme, onToggleTheme, onAddFunds }) {
-  const { connected, connecting, ethAddress, injAddress, usdtBalance, connect, error } = useWalletStore();
+  const { connected, connecting, ethAddress, injAddress, usdtBalance, connect, disconnect, error } = useWalletStore();
 
   return (
     <header style={{
@@ -101,14 +101,28 @@ export default function TopBar({ onNavigate, currentView, theme, onToggleTheme, 
               style={{
                 background: 'var(--blue-grad)',
                 borderRadius: 8,
-                padding: '6px 12px',
-                display: 'flex', alignItems: 'center', gap: 6,
-                cursor: 'pointer',
+                display: 'flex', alignItems: 'center',
+                overflow: 'hidden',
                 fontSize: 12, fontWeight: 500, color: '#fff',
                 fontFamily: 'var(--font-mono)',
               }}
             >
-              {ethAddress.slice(0, 6)}...{ethAddress.slice(-4)}
+              <span style={{ padding: '6px 10px 6px 12px' }}>
+                {ethAddress.slice(0, 6)}...{ethAddress.slice(-4)}
+              </span>
+              <button
+                onClick={disconnect}
+                title="Disconnect wallet"
+                aria-label="Disconnect wallet"
+                style={{
+                  background: 'rgba(0,0,0,0.2)',
+                  border: 'none', borderLeft: '1px solid rgba(255,255,255,0.18)',
+                  color: '#fff', cursor: 'pointer',
+                  padding: '6px 10px',
+                  fontSize: 14, lineHeight: 1,
+                  fontFamily: 'var(--font-mono)',
+                }}
+              >✕</button>
             </div>
           </>
         ) : (
