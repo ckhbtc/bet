@@ -10,19 +10,27 @@ const useSessionStore = create((set, get) => ({
   status: '',
   error: null,
 
-  refresh: async () => {
+  refresh: async (expectedInjAddress = null) => {
     if (!getSessionToken()) {
       set({ active: false, expiration: null, granterAddress: null });
       return;
     }
     try {
       const r = await api.sessionCheck();
-      if (r.active) {
-        set({ active: true, expiration: r.expiration, granterAddress: r.granterAddress });
-      } else {
+      if (!r.active) {
         setSessionToken(null);
         set({ active: false, expiration: null, granterAddress: null });
+        return;
       }
+      // Session belongs to a different wallet than the one currently connected —
+      // possible when a user swaps MetaMask accounts. Refuse to surface it as
+      // "active" or the next trade would be signed against the wrong wallet.
+      if (expectedInjAddress && r.granterAddress && r.granterAddress !== expectedInjAddress) {
+        setSessionToken(null);
+        set({ active: false, expiration: null, granterAddress: null });
+        return;
+      }
+      set({ active: true, expiration: r.expiration, granterAddress: r.granterAddress });
     } catch {
       setSessionToken(null);
       set({ active: false, expiration: null, granterAddress: null });

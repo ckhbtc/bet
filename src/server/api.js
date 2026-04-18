@@ -21,6 +21,13 @@ function requireSession(req, res, next) {
   const token = bearer(req);
   const session = token ? getSessionByToken(token) : null;
   if (!session) return res.status(401).json({ error: 'No active session' });
+  // Defense in depth: if the client tells us which wallet it thinks is active,
+  // reject mismatches. Stops a stale token in localStorage from running trades
+  // on a previous wallet after the user swapped MetaMask accounts.
+  const asserted = req.body?.granterAddress || req.headers['x-granter-address'];
+  if (asserted && asserted !== session.granterAddress) {
+    return res.status(403).json({ error: 'Session wallet mismatch — please re-authorize' });
+  }
   req.session = session;
   next();
 }

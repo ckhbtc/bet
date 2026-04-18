@@ -44,6 +44,13 @@ export default function App() {
   const { markets, positions, loading, startPolling, stopPolling } = useMarketStore();
   const session = useSessionStore();
 
+  // Re-validate the session token against the currently-connected wallet.
+  // Prevents a stale sessionToken (bound to a prior granter) from being
+  // treated as active after the user swaps MetaMask accounts.
+  useEffect(() => {
+    useSessionStore.getState().refresh(injAddress);
+  }, [injAddress]);
+
   // Start polling when wallet connects
   useEffect(() => {
     if (connected && injAddress) {

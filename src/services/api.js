@@ -16,6 +16,13 @@ async function call(path, { method = 'GET', body, auth = false } = {}) {
   if (auth) {
     const token = getSessionToken();
     if (token) headers['Authorization'] = `Bearer ${token}`;
+    // Read the currently-connected wallet from the store lazily to avoid a
+    // circular import; attach it so the server can reject token-vs-wallet drift.
+    try {
+      const { default: useWalletStore } = await import('../stores/walletStore');
+      const inj = useWalletStore.getState().injAddress;
+      if (inj) headers['X-Granter-Address'] = inj;
+    } catch { /* ignore */ }
   }
   const res = await fetch(`/api${path}`, {
     method,
