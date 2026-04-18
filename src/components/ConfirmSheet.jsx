@@ -17,8 +17,24 @@ export default function ConfirmSheet({ bet, onConfirm, onEdit }) {
         <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 3, marginBottom: 4 }}>
           Confirm Your Bet
         </div>
-        <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 20 }}>
-          {bet.direction === 'up' ? '🟢' : '🔴'} {bet.market.symbol} going {bet.direction === 'up' ? 'UP' : 'DOWN'}
+        <div style={{
+          fontSize: 22, fontWeight: 700, marginBottom: 20,
+          fontFamily: 'var(--font-heading)', letterSpacing: -0.3,
+          display: 'flex', alignItems: 'center', gap: 10,
+        }}>
+          <span style={{
+            fontSize: 24, fontWeight: 800, lineHeight: 1,
+            fontFamily: 'var(--font-mono)',
+            color: bet.direction === 'up' ? 'var(--green)' : 'var(--red)',
+          }}>
+            {bet.direction === 'up' ? '↑' : '↓'}
+          </span>
+          <span>
+            {bet.market.symbol} going{' '}
+            <span style={{ color: bet.direction === 'up' ? 'var(--green)' : 'var(--red)' }}>
+              {bet.direction === 'up' ? 'UP' : 'DOWN'}
+            </span>
+          </span>
         </div>
 
         <div style={{
