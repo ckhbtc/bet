@@ -39,7 +39,14 @@ export default function BetPanel({ market, balance, onConfirm, onClose }) {
     setWinTarget(Math.max(0, Math.floor(val)));
   };
 
-  const canPlaceBet = stake >= 1 && winTarget >= 1 && stake <= balance && !isNaN(targetPrice) && targetPrice > 0;
+  // Short positions whose required move >= 100% would need price to hit zero
+  // (or negative). At low leverage with a big win target this happens often;
+  // surface it as "out of reach" instead of a meaningless $0 target.
+  const requiredMove = safeWinTarget / (safeStake * aggrConfig.leverage);
+  const unreachable = direction === 'down' ? requiredMove >= 1 : false;
+
+  const canPlaceBet = stake >= 1 && winTarget >= 1 && stake <= balance
+    && !isNaN(targetPrice) && targetPrice > 0 && !unreachable;
 
   return (
     <div style={{
@@ -189,24 +196,36 @@ export default function BetPanel({ market, balance, onConfirm, onClose }) {
       </div>
 
       {/* Target price */}
-      <div style={{
-        background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 8,
-        padding: '12px 16px', marginBottom: 12, textAlign: 'center',
-      }}>
+      {unreachable ? (
         <div style={{
-          fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)',
-          textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 4,
+          background: 'var(--accent-dim)', border: '1px solid var(--accent)', borderRadius: 8,
+          padding: '14px 16px', marginBottom: 12, textAlign: 'center',
+          fontSize: 13, color: 'var(--accent)', lineHeight: 1.5,
+          fontFamily: 'var(--font-heading)',
         }}>
-          {market.symbol} needs to reach
+          {aggrConfig.label} leverage can't reach this win.
+          Try a higher aggressiveness or a smaller win target.
         </div>
+      ) : (
         <div style={{
-          fontSize: 22, fontWeight: 700, fontFamily: 'var(--font-heading)',
-          letterSpacing: -0.5, color: 'var(--accent)',
-          fontVariantNumeric: 'tabular-nums',
+          background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 8,
+          padding: '12px 16px', marginBottom: 12, textAlign: 'center',
         }}>
-          ${formatPrice(targetPrice)}
+          <div style={{
+            fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)',
+            textTransform: 'uppercase', letterSpacing: 0.6, marginBottom: 4,
+          }}>
+            {market.symbol} needs to reach
+          </div>
+          <div style={{
+            fontSize: 22, fontWeight: 700, fontFamily: 'var(--font-heading)',
+            letterSpacing: -0.5, color: 'var(--accent)',
+            fontVariantNumeric: 'tabular-nums',
+          }}>
+            ${formatPrice(targetPrice)}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Validation warnings */}
       {stake > balance && (
@@ -220,18 +239,20 @@ export default function BetPanel({ market, balance, onConfirm, onClose }) {
       )}
 
       {/* Risk line */}
-      <div style={{
-        fontSize: 12, color: 'var(--text-muted)', textAlign: 'center',
-        marginBottom: 16, lineHeight: 1.6,
-      }}>
-        If {market.symbol} reaches{' '}
-        <span style={{ color: 'var(--red)', fontFamily: 'var(--font-mono)' }}>
-          ${formatPrice(liqPrice)}
-        </span>{' '}before{' '}
-        <span style={{ color: 'var(--green)', fontFamily: 'var(--font-mono)' }}>
-          ${formatPrice(targetPrice)}
-        </span>, you may lose your ${stake} margin.
-      </div>
+      {!unreachable && (
+        <div style={{
+          fontSize: 12, color: 'var(--text-muted)', textAlign: 'center',
+          marginBottom: 16, lineHeight: 1.6,
+        }}>
+          If {market.symbol} reaches{' '}
+          <span style={{ color: 'var(--red)', fontFamily: 'var(--font-mono)' }}>
+            ${formatPrice(liqPrice)}
+          </span>{' '}before{' '}
+          <span style={{ color: 'var(--green)', fontFamily: 'var(--font-mono)' }}>
+            ${formatPrice(targetPrice)}
+          </span>, you may lose your ${stake} margin.
+        </div>
+      )}
 
       {/* CTA */}
       <button
