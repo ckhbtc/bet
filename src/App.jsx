@@ -12,6 +12,7 @@ import ConfirmSheet from './components/ConfirmSheet';
 import ActiveBets from './components/ActiveBets';
 import BetResult from './components/BetResult';
 import AuthZSetup from './components/AuthZSetup';
+import BridgeModal from './components/BridgeModal';
 import Confetti from './components/Confetti';
 import { AGGRESSIVENESS } from './data/mockData';
 import { api } from './services/api';
@@ -26,6 +27,7 @@ export default function App() {
   const [showResult, setShowResult] = useState(null);
   const [txStatus, setTxStatus] = useState(null); // { type: 'loading'|'success'|'error', message }
   const [confetti, setConfetti] = useState(false);
+  const [showBridge, setShowBridge] = useState(false);
   const [theme, setTheme] = useState(readInitialTheme);
 
   // Sync theme to <html data-theme> + localStorage
@@ -118,7 +120,7 @@ export default function App() {
 
   return (
     <>
-      <TopBar onNavigate={setView} currentView={view} theme={theme} onToggleTheme={toggleTheme} />
+      <TopBar onNavigate={setView} currentView={view} theme={theme} onToggleTheme={toggleTheme} onAddFunds={() => setShowBridge(true)} />
 
       {/* Transaction status toast */}
       {confetti && <Confetti />}
@@ -309,6 +311,8 @@ export default function App() {
           onGoHome={() => { setShowResult(null); setView('home'); }}
         />
       )}
+
+      {showBridge && <BridgeModal onClose={() => setShowBridge(false)} />}
     </>
   );
 }

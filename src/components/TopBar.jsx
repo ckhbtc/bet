@@ -1,6 +1,6 @@
 import useWalletStore from '../stores/walletStore';
 
-export default function TopBar({ onNavigate, currentView, theme, onToggleTheme }) {
+export default function TopBar({ onNavigate, currentView, theme, onToggleTheme, onAddFunds }) {
   const { connected, connecting, ethAddress, injAddress, usdtBalance, connect, error } = useWalletStore();
 
   return (
@@ -70,6 +70,20 @@ export default function TopBar({ onNavigate, currentView, theme, onToggleTheme }
         </button>
         {connected ? (
           <>
+            <button
+              onClick={onAddFunds}
+              style={{
+                background: 'var(--bg-card)',
+                border: '1px solid var(--border)',
+                borderRadius: 8,
+                padding: '6px 12px',
+                color: 'var(--accent)',
+                fontSize: 12, fontWeight: 600,
+                fontFamily: 'var(--font-heading)',
+                cursor: 'pointer',
+                display: 'inline-flex', alignItems: 'center', gap: 4,
+              }}
+            >+ Add funds</button>
             <div style={{
               background: 'var(--bg-card)',
               border: '1px solid var(--border)',

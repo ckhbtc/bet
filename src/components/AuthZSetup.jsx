@@ -1,9 +1,12 @@
+import { useState } from 'react';
 import useSessionStore from '../stores/sessionStore';
 import useWalletStore from '../stores/walletStore';
+import BridgeModal from './BridgeModal';
 
 export default function AuthZSetup() {
   const { granting, status, error, grant } = useSessionStore();
-  const { injAddress, ethAddress } = useWalletStore();
+  const { injAddress, ethAddress, usdtBalance } = useWalletStore();
+  const [showBridge, setShowBridge] = useState(false);
 
   const handleGrant = () => grant({ injAddress, ethAddress }).catch(() => {});
 
@@ -68,6 +71,26 @@ export default function AuthZSetup() {
           {error}
         </div>
       )}
+
+      <div style={{
+        marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)',
+        fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.5,
+      }}>
+        {usdtBalance > 0
+          ? <>You have <span style={{ color: 'var(--green)', fontFamily: 'var(--font-mono)' }}>${usdtBalance.toFixed(2)}</span> USDT ready to bet.</>
+          : 'No funds yet?'}{' '}
+        <button
+          onClick={() => setShowBridge(true)}
+          style={{
+            background: 'transparent', border: 'none',
+            color: 'var(--accent)', cursor: 'pointer', padding: 0,
+            fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-heading)',
+            textDecoration: 'underline',
+          }}
+        >Bridge from Arbitrum →</button>
+      </div>
+
+      {showBridge && <BridgeModal onClose={() => setShowBridge(false)} />}
     </div>
   );
 }
