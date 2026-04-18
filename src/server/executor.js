@@ -174,26 +174,31 @@ export async function executeOpen({
     feeRecipient: session.granterAddress,
   });
 
-  const msgs = [openMsg];
+  const openResult = await broadcastViaAuthz([openMsg], session);
 
-  // Reduce-only TP limit on opposite side
+  // Reduce-only TP placed in a second tx — bundling with open fails because the
+  // chain validates the reduce-only against pre-tx state where no position exists.
   if (tpPrice && Number(tpPrice) > 0) {
-    const tpHuman = new Decimal(tpPrice);
-    const tpChainPrice = toChainPrice(tpHuman, market.minPriceTickSize);
-    const tpMsg = MsgCreateDerivativeLimitOrder.fromJSON({
-      marketId: market.marketId,
-      subaccountId,
-      injectiveAddress: session.granterAddress,
-      orderType: isBuy ? OrderTypeMap.SELL : OrderTypeMap.BUY,
-      price: tpChainPrice,
-      margin: '0', // reduce-only
-      quantity: chainQty,
-      feeRecipient: session.granterAddress,
-    });
-    msgs.push(tpMsg);
+    try {
+      const tpChainPrice = toChainPrice(new Decimal(tpPrice), market.minPriceTickSize);
+      const tpMsg = MsgCreateDerivativeLimitOrder.fromJSON({
+        marketId: market.marketId,
+        subaccountId,
+        injectiveAddress: session.granterAddress,
+        orderType: isBuy ? OrderTypeMap.SELL : OrderTypeMap.BUY,
+        price: tpChainPrice,
+        margin: '0',
+        quantity: chainQty,
+        feeRecipient: session.granterAddress,
+      });
+      await broadcastViaAuthz([tpMsg], session);
+    } catch (err) {
+      // Open succeeded; TP placement failed. Surface the position txHash anyway.
+      console.warn('[executor] TP placement failed (open succeeded):', err.message);
+    }
   }
 
-  return broadcastViaAuthz(msgs, session);
+  return openResult;
 }
 
 // ─── Close position (market order) ─────────────────────────────────────────
