@@ -11,10 +11,12 @@ import BetPanel from './components/BetPanel';
 import ConfirmSheet from './components/ConfirmSheet';
 import ActiveBets from './components/ActiveBets';
 import BetResult from './components/BetResult';
+import AuthZSetup from './components/AuthZSetup';
 import { AGGRESSIVENESS } from './data/mockData';
-import { openTrade, closeTrade } from './services/tx';
+import { api } from './services/api';
 import useWalletStore from './stores/walletStore';
 import useMarketStore from './stores/marketStore';
+import useSessionStore from './stores/sessionStore';
 
 export default function App() {
   const [view, setView] = useState('home');
@@ -36,6 +38,7 @@ export default function App() {
 
   const { connected, injAddress, usdtBalance, refreshBalances } = useWalletStore();
   const { markets, positions, loading, startPolling, stopPolling } = useMarketStore();
+  const session = useSessionStore();
 
   // Start polling when wallet connects
   useEffect(() => {
@@ -59,33 +62,28 @@ export default function App() {
 
     const aggrConfig = AGGRESSIVENESS[pendingBet.aggr];
 
-    setTxStatus({ type: 'loading', message: 'Waiting for wallet signature...' });
+    setTxStatus({ type: 'loading', message: 'Placing trade...' });
     setPendingBet(null);
 
     try {
-      const result = await openTrade({
-        injAddress: useWalletStore.getState().injAddress,
-        ethAddress: useWalletStore.getState().ethAddress,
-        market: pendingBet.market,
+      const result = await api.tradeOpen({
+        marketId: pendingBet.market.marketId,
         side: pendingBet.direction === 'up' ? 'long' : 'short',
         stakeUsdt: pendingBet.stake,
         leverage: aggrConfig.leverage,
+        tpPrice: pendingBet.targetPrice,
       });
 
       setTxStatus({ type: 'success', message: `Trade placed! Tx: ${result.txHash.slice(0, 12)}...` });
       setSelectedMarket(null);
       setView('bets');
 
-      // Refresh balances and positions
       refreshBalances();
       useMarketStore.getState().fetchPositions(useWalletStore.getState().injAddress);
 
       setTimeout(() => setTxStatus(null), 5000);
     } catch (err) {
-      const msg = err.message.includes('User denied')
-        ? 'Transaction cancelled'
-        : err.message;
-      setTxStatus({ type: 'error', message: msg });
+      setTxStatus({ type: 'error', message: err.message });
       setTimeout(() => setTxStatus(null), 5000);
     }
   }, [pendingBet, connected, refreshBalances]);
@@ -96,10 +94,8 @@ export default function App() {
     setTxStatus({ type: 'loading', message: 'Closing position...' });
 
     try {
-      const result = await closeTrade({
-        injAddress: useWalletStore.getState().injAddress,
-        ethAddress: useWalletStore.getState().ethAddress,
-        market: position.market,
+      const result = await api.tradeClose({
+        marketId: position.marketId,
         side: position.side,
         quantity: position.quantity,
       });
@@ -110,16 +106,12 @@ export default function App() {
       });
       setTxStatus({ type: 'success', message: `Position closed! Tx: ${result.txHash.slice(0, 12)}...` });
 
-      // Refresh
       refreshBalances();
       useMarketStore.getState().fetchPositions(useWalletStore.getState().injAddress);
 
       setTimeout(() => setTxStatus(null), 5000);
     } catch (err) {
-      const msg = err.message.includes('User denied')
-        ? 'Transaction cancelled'
-        : err.message;
-      setTxStatus({ type: 'error', message: msg });
+      setTxStatus({ type: 'error', message: err.message });
       setTimeout(() => setTxStatus(null), 5000);
     }
   }, [connected, refreshBalances]);
@@ -183,14 +175,7 @@ export default function App() {
 
           {view === 'home' && selectedMarket && (
             <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 20 }}>
-              {connected ? (
-                <BetPanel
-                  market={selectedMarket}
-                  balance={usdtBalance}
-                  onConfirm={handleBetConfirm}
-                  onClose={() => setSelectedMarket(null)}
-                />
-              ) : (
+              {!connected ? (
                 <div style={{
                   textAlign: 'center', padding: '40px 20px',
                   background: 'var(--bg-card)', border: '1px solid var(--border)',
@@ -211,6 +196,15 @@ export default function App() {
                     }}
                   >Connect Wallet</button>
                 </div>
+              ) : !session.active ? (
+                <AuthZSetup />
+              ) : (
+                <BetPanel
+                  market={selectedMarket}
+                  balance={usdtBalance}
+                  onConfirm={handleBetConfirm}
+                  onClose={() => setSelectedMarket(null)}
+                />
               )}
             </div>
           )}

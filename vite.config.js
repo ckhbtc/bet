@@ -3,7 +3,12 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
-  server: { port: 36000 },
+  server: {
+    port: 36000,
+    proxy: {
+      '/api': 'http://localhost:36001',
+    },
+  },
   define: {
     'process.env': {},
     global: 'globalThis',
