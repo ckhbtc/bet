@@ -18,12 +18,13 @@ export default function TopBar({ onNavigate, currentView, theme, onToggleTheme }
     }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }} onClick={() => onNavigate('home')}>
-          <div style={{
-            width: 28, height: 28, borderRadius: '50%',
-            background: 'var(--accent-grad)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            fontSize: 14, fontWeight: 700, color: 'var(--on-accent)',
-          }}>I</div>
+          <img
+            src="/iso.png"
+            alt="INJ Bet"
+            width={28}
+            height={28}
+            style={{ width: 28, height: 28, display: 'block' }}
+          />
           <span style={{
             fontSize: 16, fontWeight: 700, letterSpacing: -0.5,
             fontFamily: 'var(--font-heading)',
