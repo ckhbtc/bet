@@ -100,10 +100,6 @@ export default function App() {
         quantity: position.quantity,
       });
 
-      setShowResult({
-        ...position,
-        txHash: result.txHash,
-      });
       setTxStatus({ type: 'success', message: `Position closed! Tx: ${result.txHash.slice(0, 12)}...` });
 
       refreshBalances();
