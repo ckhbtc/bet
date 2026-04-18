@@ -12,6 +12,7 @@ import ConfirmSheet from './components/ConfirmSheet';
 import ActiveBets from './components/ActiveBets';
 import BetResult from './components/BetResult';
 import AuthZSetup from './components/AuthZSetup';
+import Confetti from './components/Confetti';
 import { AGGRESSIVENESS } from './data/mockData';
 import { api } from './services/api';
 import useWalletStore from './stores/walletStore';
@@ -24,6 +25,7 @@ export default function App() {
   const [pendingBet, setPendingBet] = useState(null);
   const [showResult, setShowResult] = useState(null);
   const [txStatus, setTxStatus] = useState(null); // { type: 'loading'|'success'|'error', message }
+  const [confetti, setConfetti] = useState(false);
   const [theme, setTheme] = useState(readInitialTheme);
 
   // Sync theme to <html data-theme> + localStorage
@@ -77,6 +79,8 @@ export default function App() {
       setTxStatus({ type: 'success', message: `Trade placed! Tx: ${result.txHash.slice(0, 12)}...` });
       setSelectedMarket(null);
       setView('bets');
+      setConfetti(true);
+      setTimeout(() => setConfetti(false), 3500);
 
       refreshBalances();
       useMarketStore.getState().fetchPositions(useWalletStore.getState().injAddress);
@@ -117,6 +121,8 @@ export default function App() {
       <TopBar onNavigate={setView} currentView={view} theme={theme} onToggleTheme={toggleTheme} />
 
       {/* Transaction status toast */}
+      {confetti && <Confetti />}
+
       {txStatus && (
         <div style={{
           position: 'fixed', top: 70, left: '50%', transform: 'translateX(-50%)',
@@ -262,7 +268,7 @@ export default function App() {
                       </span>
                     </span>
                     <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                      ${pos.stake.toFixed(2)} amount
+                      ${pos.stake.toFixed(2)} bet
                     </div>
                   </div>
                   <span style={{

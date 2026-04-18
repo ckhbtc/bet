@@ -128,8 +128,9 @@ input[type="number"] {
 }
 
 @keyframes confetti-fall {
-  0% { transform: translateY(-100%) rotate(0deg); opacity: 1; }
-  100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+  0%   { transform: translate(0, -20px) rotate(0deg); opacity: 1; }
+  90%  { opacity: 1; }
+  100% { transform: translate(var(--drift, 0), 105vh) rotate(720deg); opacity: 0; }
 }
 
 @keyframes slide-up {
