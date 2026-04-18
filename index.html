@@ -6,7 +6,26 @@
     <title>INJ Bet — Bet on Crypto</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Funnel+Display:wght@300..800&family=Onest:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet" />
+    <script>
+      // Set theme BEFORE first paint to avoid FOUC.
+      // Order: localStorage > prefers-color-scheme > 'dark' (preserves prior UX).
+      (function () {
+        try {
+          var saved = localStorage.getItem('bet-theme');
+          var t = (saved === 'light' || saved === 'dark')
+            ? saved
+            : (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+          document.documentElement.dataset.theme = t;
+        } catch (e) {
+          document.documentElement.dataset.theme = 'dark';
+        }
+      })();
+    </script>
+    <style>
+      html { background: #f7f3ec; color: #1f1a13; }
+      html[data-theme="dark"] { background: #07090e; color: #e8ecf6; }
+    </style>
   </head>
   <body>
     <div id="root"></div>

@@ -4,33 +4,86 @@
   box-sizing: border-box;
 }
 
+/*
+ * Two themes share the same component CSS — only the variables flip:
+ * - LIGHT (default) = Hearth: warm cream paper, terracotta accent
+ * - DARK            = Atrium: navy void, cyan→blue gradient accent
+ *
+ * Toggle by setting data-theme="light" | "dark" on <html>.
+ * The init script in index.html sets it BEFORE first paint to avoid FOUC.
+ */
+
+/* Light theme (Hearth) — defaults */
 :root {
-  --bg-primary: #06080d;
-  --bg-secondary: #0c0f16;
-  --bg-card: #111520;
-  --bg-card-hover: #161b28;
-  --border: #1a1f2e;
-  --border-light: #252b3d;
-  --text-primary: #e8e8f0;
-  --text-secondary: #8890a4;
-  --text-muted: #4a5068;
-  --accent: #f59e0b;
-  --accent-light: #fbbf24;
-  --green: #22c55e;
-  --green-dim: #166534;
-  --red: #ef4444;
-  --red-dim: #7f1d1d;
-  --blue: #4a9eff;
-  --font-heading: 'Outfit', sans-serif;
-  --font-mono: 'JetBrains Mono', monospace;
+  --bg-primary:    #f7f3ec;
+  --bg-secondary:  #f1ece2;
+  --bg-card:       #f7f3ec;
+  --bg-card-hover: #ece5d4;
+  --border:        rgba(31, 26, 19, 0.08);
+  --border-light:  rgba(31, 26, 19, 0.15);
+  --text-primary:   #1f1a13;
+  --text-secondary: #6b6256;
+  --text-muted:     #a59c8e;
+  --accent:        #c0532b;
+  --accent-light:  #d0633b;
+  --accent-dim:    rgba(192, 83, 43, 0.12);
+  --accent-grad:   #c0532b;
+  --on-accent:     #ffffff;
+  --green:         #4a7a3a;
+  --green-dim:     rgba(74, 122, 58, 0.12);
+  --red:           #b53a28;
+  --red-dim:       rgba(181, 58, 40, 0.12);
+  --blue:          #3b6a8c;
+  --blue-grad:     #3b6a8c;
+  --overlay:       rgba(31, 26, 19, 0.45);
+  --font-heading:  'Funnel Display', 'Inter', sans-serif;
+  --font-body:     'Onest', 'Inter', -apple-system, sans-serif;
+  --font-mono:     'JetBrains Mono', 'SF Mono', monospace;
+}
+
+/* Dark theme (Atrium) — cyan→blue gradient on navy void */
+[data-theme="dark"] {
+  --bg-primary:    #07090e;
+  --bg-secondary:  #0c1018;
+  --bg-card:       #141a28;
+  --bg-card-hover: #1c2438;
+  --border:        rgba(120, 165, 220, 0.10);
+  --border-light:  rgba(120, 165, 220, 0.22);
+  --text-primary:   #e8ecf6;
+  --text-secondary: #aab4c8;
+  --text-muted:     #6b7488;
+  --accent:        #00d4ff;
+  --accent-light:  #3d7bff;
+  --accent-dim:    rgba(0, 212, 255, 0.12);
+  --accent-grad:   linear-gradient(135deg, #00d4ff 0%, #3d7bff 100%);
+  --on-accent:     #07090e;
+  --green:         #34d399;
+  --green-dim:     rgba(52, 211, 153, 0.15);
+  --red:           #f87171;
+  --red-dim:       rgba(248, 113, 113, 0.15);
+  --blue:          #60a5fa;
+  --blue-grad:     linear-gradient(135deg, #60a5fa, #818cf8);
+  --overlay:       rgba(0, 0, 0, 0.7);
+}
+
+html, body {
+  transition: background 0.3s ease, color 0.3s ease;
+}
+
+h1, h2, h3, h4 {
+  font-family: var(--font-heading);
+  letter-spacing: -0.02em;
+  font-weight: 600;
 }
 
 body {
   background: var(--bg-primary);
   color: var(--text-primary);
-  font-family: var(--font-heading);
+  font-family: var(--font-body);
   min-height: 100vh;
   overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+  letter-spacing: -0.005em;
 }
 
 #root {
@@ -83,3 +136,44 @@ input[type="number"] {
   0% { transform: translateY(20px); opacity: 0; }
   100% { transform: translateY(0); opacity: 1; }
 }
+
+/* ─── Theme toggle (sun/moon pill) ────────────────────────────────────────── */
+
+.theme-toggle {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: 999px;
+  width: 44px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  padding: 2px;
+  cursor: pointer;
+  transition: all 0.25s;
+  flex-shrink: 0;
+}
+.theme-toggle:hover { border-color: var(--accent); }
+
+.theme-toggle-thumb {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: var(--text-primary);
+  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.25s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--bg-primary);
+  font-size: 11px;
+  line-height: 1;
+}
+[data-theme="dark"] .theme-toggle-thumb {
+  transform: translateX(18px);
+  background: var(--accent-grad);
+  box-shadow: 0 0 10px rgba(0, 212, 255, 0.4);
+}
+
+.theme-toggle .icon-sun  { display: block; }
+.theme-toggle .icon-moon { display: none; }
+[data-theme="dark"] .theme-toggle .icon-sun  { display: none; }
+[data-theme="dark"] .theme-toggle .icon-moon { display: block; }
