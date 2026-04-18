@@ -54,14 +54,6 @@ export default function ProgressBar({ liqPrice, tpPrice, markPrice, direction })
           transition: 'left 0.4s ease',
         }} />
       </div>
-
-      <div style={{
-        textAlign: 'center', fontSize: 11,
-        fontFamily: 'var(--font-mono)',
-        color: 'var(--text-secondary)', marginTop: 6,
-      }}>
-        Mark ${formatPrice(markPrice)}
-      </div>
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { formatDollar, formatPrice, liquidationPrice } from '../data/mockData';
 import ProgressBar from './ProgressBar';
+import CoinLogo from './CoinLogo';
 
 const STATUS_CONFIG = {
   winning: { label: 'WINNING', bg: 'var(--green-dim)', border: 'var(--green)', color: 'var(--green)' },
@@ -36,17 +37,11 @@ export default function ActiveBets({ bets, onCashOut }) {
             <div style={{
               background: status.bg,
               padding: '8px 16px',
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
             }}>
               <span style={{
                 fontSize: 10, fontWeight: 700, letterSpacing: 2,
                 color: status.color, textTransform: 'uppercase',
               }}>{status.label}</span>
-              <span style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                {bet.side?.toUpperCase()} {bet.quantity} {bet.symbol}
-              </span>
             </div>
 
             <div style={{ padding: 16 }}>
@@ -55,15 +50,22 @@ export default function ActiveBets({ bets, onCashOut }) {
                 display: 'flex', justifyContent: 'space-between', alignItems: 'center',
                 marginBottom: 16,
               }}>
-                <div>
-                  <div style={{ fontSize: 18, fontWeight: 700 }}>
-                    {bet.direction === 'up' ? '🟢' : '🔴'} {bet.asset}
-                    <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 400, marginLeft: 8 }}>
-                      {bet.direction === 'up' ? 'Long' : 'Short'}
-                    </span>
-                  </div>
-                  <div style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: 2 }}>
-                    Margin ${formatPrice(bet.stake)} · {bet.pnlPct != null ? `${bet.pnlPct.toFixed(1)}% PnL` : ''}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <CoinLogo symbol={bet.asset} size={32} />
+                  <div>
+                    <div style={{ fontSize: 18, fontWeight: 700, fontFamily: 'var(--font-heading)' }}>
+                      {bet.asset}
+                      <span style={{
+                        fontSize: 12, fontWeight: 600, marginLeft: 8,
+                        color: bet.direction === 'up' ? 'var(--green)' : 'var(--red)',
+                        fontFamily: 'var(--font-heading)',
+                      }}>
+                        {bet.direction === 'up' ? 'Up' : 'Down'}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: 2 }}>
+                      Amount ${formatPrice(bet.stake)} · {bet.pnlPct != null ? `${bet.pnlPct.toFixed(1)}% PnL` : ''}
+                    </div>
                   </div>
                 </div>
                 <div style={{
@@ -85,7 +87,7 @@ export default function ActiveBets({ bets, onCashOut }) {
                   <span style={{ color: 'var(--text-secondary)' }}>${formatPrice(bet.entryPrice)}</span>
                 </div>
                 <div>
-                  <span style={{ color: 'var(--text-muted)' }}>Mark </span>
+                  <span style={{ color: 'var(--text-muted)' }}>Current </span>
                   <span style={{ color: isPositive ? 'var(--green)' : 'var(--red)' }}>${formatPrice(bet.markPrice || bet.currentPrice)}</span>
                 </div>
               </div>
