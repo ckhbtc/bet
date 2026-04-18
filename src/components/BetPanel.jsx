@@ -125,7 +125,10 @@ export default function BetPanel({ market, balance, onConfirm, onClose }) {
 
       {/* Stake */}
       <div style={{ marginBottom: 16 }}>
-        <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>I want to bet</label>
+        <label style={{
+          fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)',
+          textTransform: 'uppercase', letterSpacing: 0.6, display: 'block', marginBottom: 6,
+        }}>I want to bet</label>
         <div style={{ position: 'relative' }}>
           <span style={{
             position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
@@ -160,7 +163,10 @@ export default function BetPanel({ market, balance, onConfirm, onClose }) {
 
       {/* Win target */}
       <div style={{ marginBottom: 16 }}>
-        <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 6 }}>I want to win</label>
+        <label style={{
+          fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)',
+          textTransform: 'uppercase', letterSpacing: 0.6, display: 'block', marginBottom: 6,
+        }}>I want to win</label>
         <div style={{ position: 'relative' }}>
           <span style={{
             position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
@@ -181,7 +187,10 @@ export default function BetPanel({ market, balance, onConfirm, onClose }) {
 
       {/* Aggressiveness */}
       <div style={{ marginBottom: 20 }}>
-        <label style={{ fontSize: 12, color: 'var(--text-muted)', display: 'block', marginBottom: 8 }}>Aggressiveness</label>
+        <label style={{
+          fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)',
+          textTransform: 'uppercase', letterSpacing: 0.6, display: 'block', marginBottom: 8,
+        }}>Aggressiveness</label>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
           {Object.entries(AGGRESSIVENESS).map(([key, config]) => (
             <button
