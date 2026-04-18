@@ -158,9 +158,9 @@ export default function App() {
         <div style={{ flex: 1, minWidth: 0 }}>
           {view === 'home' && !selectedMarket && (
             <>
-              <div style={{ marginBottom: 20 }}>
-                <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>Markets</h1>
-                <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+              <div style={{ marginBottom: 24 }}>
+                <h1 style={{ fontSize: 32, fontWeight: 700, letterSpacing: -1, marginBottom: 6 }}>Markets</h1>
+                <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>
                   {loading ? 'Loading markets...' : connected ? 'Pick an asset and place your bet' : 'Connect wallet to start trading'}
                 </p>
               </div>
@@ -217,9 +217,9 @@ export default function App() {
 
           {view === 'bets' && (
             <>
-              <div style={{ marginBottom: 20 }}>
-                <h1 style={{ fontSize: 24, fontWeight: 700, marginBottom: 4 }}>My Bets</h1>
-                <p style={{ fontSize: 13, color: 'var(--text-muted)' }}>
+              <div style={{ marginBottom: 24 }}>
+                <h1 style={{ fontSize: 32, fontWeight: 700, letterSpacing: -1, marginBottom: 6 }}>My Bets</h1>
+                <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>
                   {positions.length} active position{positions.length !== 1 ? 's' : ''}
                 </p>
               </div>

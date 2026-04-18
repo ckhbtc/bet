@@ -82,11 +82,22 @@ export default function MarketCard({ market, onPlaceBet }) {
       }}
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <CoinLogo symbol={market.symbol} size={36} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <CoinLogo symbol={market.symbol} size={40} />
           <div>
-            <div style={{ fontSize: 15, fontWeight: 600 }}>{market.symbol}</div>
-            <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{market.name}</div>
+            <div style={{
+              fontSize: 18, fontWeight: 700, letterSpacing: -0.3,
+              fontFamily: 'var(--font-heading)',
+              lineHeight: 1.2,
+            }}>{market.symbol}</div>
+            <div style={{
+              fontSize: 10, fontWeight: 500,
+              fontFamily: 'var(--font-mono)',
+              color: 'var(--text-muted)',
+              letterSpacing: 0.6,
+              textTransform: 'uppercase',
+              marginTop: 2,
+            }}>{market.name}</div>
           </div>
         </div>
         <Sparkline data={market.sparkline} color={isUp ? 'var(--green)' : 'var(--red)'} />
@@ -94,7 +105,12 @@ export default function MarketCard({ market, onPlaceBet }) {
 
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
         <div>
-          <div style={{ fontSize: 20, fontWeight: 700, fontFamily: 'var(--font-mono)' }}>
+          <div style={{
+            fontSize: 30, fontWeight: 700, letterSpacing: -1,
+            fontFamily: 'var(--font-heading)',
+            lineHeight: 1,
+            fontVariantNumeric: 'tabular-nums',
+          }}>
             ${formatPrice(market.price)}
           </div>
           <div style={{
@@ -102,6 +118,7 @@ export default function MarketCard({ market, onPlaceBet }) {
             fontFamily: 'var(--font-mono)',
             color: isUp ? 'var(--green)' : 'var(--red)',
             fontWeight: 500,
+            marginTop: 6,
           }}>
             {isUp ? '↑' : '↓'} {Math.abs(market.change24h).toFixed(2)}%
           </div>
@@ -111,12 +128,12 @@ export default function MarketCard({ market, onPlaceBet }) {
           color: 'var(--on-accent)',
           border: 'none',
           borderRadius: 8,
-          padding: '8px 16px',
-          fontSize: 12,
+          padding: '10px 18px',
+          fontSize: 13,
           fontWeight: 600,
           cursor: 'pointer',
           fontFamily: 'var(--font-heading)',
-          letterSpacing: 0.3,
+          letterSpacing: 0.2,
         }}>
           Place Bet →
         </button>
