@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { listMarkets, fetchAllPrices, fetchPositions } from '../services/injective';
+import { listMarkets, fetchAllPrices, fetchPositions, fetchMarketsSummary } from '../services/injective';
 
 // Only show USDT perp markets for these symbols
 const FEATURED_SYMBOLS = ['BTC', 'ETH', 'SOL', 'INJ', 'TIA', 'ATOM'];
@@ -31,18 +31,25 @@ const useMarketStore = create((set, get) => ({
 
       const markets = [...featured, ...extra];
 
-      // Fetch prices for all
-      const prices = await fetchAllPrices(markets);
+      // Oracle prices + 24h market summary in parallel.
+      // Oracle gives the freshest price; summary gives the 24h open used
+      // to compute % change.
+      const [prices, summaries] = await Promise.all([
+        fetchAllPrices(markets),
+        fetchMarketsSummary(),
+      ]);
 
-      // Map to UI format
-      const uiMarkets = markets.map(m => ({
-        ...m,
-        id: m.marketId,
-        name: m.ticker,
-        price: prices[m.marketId] || 0,
-        change24h: 0, // We don't have 24h change easily; set to 0
-        sparkline: [], // No sparkline data from oracle
-      }));
+      const uiMarkets = markets.map(m => {
+        const summary = summaries[m.marketId];
+        return {
+          ...m,
+          id: m.marketId,
+          name: m.ticker,
+          price: prices[m.marketId] || summary?.price || 0,
+          change24h: summary?.change24hPct || 0,
+          sparkline: [], // No sparkline data from oracle
+        };
+      });
 
       set({ markets: uiMarkets, prices, loading: false });
     } catch (err) {
@@ -65,13 +72,20 @@ const useMarketStore = create((set, get) => ({
     const { markets } = get();
     if (markets.length === 0) return;
     try {
-      const prices = await fetchAllPrices(markets);
+      const [prices, summaries] = await Promise.all([
+        fetchAllPrices(markets),
+        fetchMarketsSummary(),
+      ]);
       set(state => ({
         prices,
-        markets: state.markets.map(m => ({
-          ...m,
-          price: prices[m.marketId] || m.price,
-        })),
+        markets: state.markets.map(m => {
+          const summary = summaries[m.marketId];
+          return {
+            ...m,
+            price: prices[m.marketId] || summary?.price || m.price,
+            change24h: summary?.change24hPct ?? m.change24h,
+          };
+        }),
       }));
     } catch (err) {
       console.error('Price update failed:', err);

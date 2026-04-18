@@ -118,6 +118,31 @@ export async function fetchAllPrices(markets) {
   return prices;
 }
 
+// ─── 24h market summary (price, open, change) ─────────────────────────────────
+//
+// Returns a Map keyed by marketId with { price, open, change24hPct } —
+// change24hPct is a percentage (e.g. -1.32 = -1.32%) computed from open/price
+// so the value is unambiguous regardless of how the SDK's `.change` field
+// happens to be encoded.
+
+export async function fetchMarketsSummary() {
+  try {
+    const summaries = await derivativesApi.fetchMarketsSummary();
+    const map = {};
+    for (const s of summaries) {
+      if (!s.marketId) continue;
+      const open = Number(s.open ?? 0);
+      const price = Number(s.price ?? s.lastPrice ?? 0);
+      const change24hPct = (open > 0 && price > 0) ? ((price - open) / open) * 100 : 0;
+      map[s.marketId] = { price, open, change24hPct };
+    }
+    return map;
+  } catch (err) {
+    console.error('fetchMarketsSummary failed:', err);
+    return {};
+  }
+}
+
 // ─── Balances ────────────────────────────────────────────────────────────────
 
 export async function fetchBalances(injAddress) {
