@@ -22,6 +22,19 @@ const LOGO_URLS = {
   DOT:   'https://imagedelivery.net/lPzngbR8EltRfBOi_WYaXw/ae6f1c3d-8d28-4850-072a-eef053cd4c00/public',
   USDT:  'https://imagedelivery.net/lPzngbR8EltRfBOi_WYaXw/e46e1742-fb16-4393-cc40-83b20e875400/public',
   USDC:  'https://imagedelivery.net/lPzngbR8EltRfBOi_WYaXw/c09b0eff-fd4a-4756-e5c9-f6bf8ac0c900/public',
+  AAVE:  'https://imagedelivery.net/lPzngbR8EltRfBOi_WYaXw/8e166a95-17b5-44e6-0521-262aac5bd500/public',
+  WIF:   'https://imagedelivery.net/lPzngbR8EltRfBOi_WYaXw/b1f81388-61db-4b2e-bb7a-bd8f76742600/public',
+  // Stocks
+  TSLA:  'https://imagedelivery.net/lPzngbR8EltRfBOi_WYaXw/039df1cd-aefe-419c-d91e-84e875cc7300/public',
+  META:  'https://imagedelivery.net/lPzngbR8EltRfBOi_WYaXw/29312712-db89-4b4e-3bcd-32255bd4f700/public',
+  COIN:  'https://imagedelivery.net/lPzngbR8EltRfBOi_WYaXw/a96fd8aa-5345-4496-c097-88038f770200/public',
+  AMZN:  'https://imagedelivery.net/lPzngbR8EltRfBOi_WYaXw/92f3173c-5998-41be-7037-97c901a0cd00/public',
+  MSTR:  'https://imagedelivery.net/lPzngbR8EltRfBOi_WYaXw/a683cc85-65be-42e6-e3ca-fa7a2ce88700/public',
+  NVDA:  'https://imagedelivery.net/lPzngbR8EltRfBOi_WYaXw/d3bd302f-2001-40a9-2718-b3ec5293c000/public',
+  AAPL:  'https://imagedelivery.net/lPzngbR8EltRfBOi_WYaXw/5352575c-cfb8-40ad-d577-d2764283dc00/public',
+  GOOGL: 'https://imagedelivery.net/lPzngbR8EltRfBOi_WYaXw/5f913b7c-6286-4871-ce1c-e1eab277ba00/public',
+  CRCL:  'https://imagedelivery.net/lPzngbR8EltRfBOi_WYaXw/b128a96d-eb75-4e0a-ed7e-4bec9b2d4500/public',
+  HOOD:  'https://imagedelivery.net/lPzngbR8EltRfBOi_WYaXw/70be479d-162e-45f7-5986-7ebdc17cb200/public',
 };
 
 export default function CoinLogo({ symbol, size = 36 }) {
