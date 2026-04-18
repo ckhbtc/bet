@@ -166,7 +166,7 @@ export default function App() {
               </div>
               <div style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(300, 1fr))',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))',
                 gap: 12,
               }}>
                 {markets.map(market => (
