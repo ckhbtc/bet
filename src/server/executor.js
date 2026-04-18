@@ -238,26 +238,32 @@ export async function executeClose({
     feeRecipient: session.granterAddress,
   });
 
-  // Cancel any reduce-only limit orders on this market+subaccount so we don't
-  // leave an orphaned TP parked after the position closes.
-  const cancelMsgs = [];
+  const closeResult = await broadcastViaAuthz([closeMsg], session);
+
+  // Best-effort cleanup of orphaned reduce-only TPs in a separate tx — bundling
+  // would atomically fail the close if the cancel hits a stale order hash.
   try {
     const { orders } = await derivativesApi.fetchOrders({ subaccountId, marketId: market.marketId });
     for (const o of orders || []) {
       const isReduceOnly = String(o.margin || '0') === '0';
       if (!isReduceOnly || !o.orderHash) continue;
-      cancelMsgs.push(MsgCancelDerivativeOrder.fromJSON({
+      const cancelMsg = MsgCancelDerivativeOrder.fromJSON({
         injectiveAddress: session.granterAddress,
         marketId: market.marketId,
         subaccountId,
         orderHash: o.orderHash,
-      }));
+      });
+      try {
+        await broadcastViaAuthz([cancelMsg], session);
+      } catch (err) {
+        console.warn('[executor] cancel failed for', o.orderHash, '-', err.message);
+      }
     }
-  } catch {
-    // Non-fatal — close still proceeds even if order lookup fails.
+  } catch (err) {
+    console.warn('[executor] order lookup for cancel failed:', err.message);
   }
 
-  return broadcastViaAuthz([closeMsg, ...cancelMsgs], session);
+  return closeResult;
 }
 
 // ─── Broadcast via AuthZ + fee delegation ──────────────────────────────────
