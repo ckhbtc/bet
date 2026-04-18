@@ -7,6 +7,7 @@ import {
   IndexerGrpcDerivativesApi,
   IndexerGrpcOracleApi,
   IndexerGrpcAccountPortfolioApi,
+  IndexerRestDerivativesChronosApi,
   Address,
 } from '@injectivelabs/sdk-ts';
 import { getNetworkEndpoints, Network } from '@injectivelabs/networks';
@@ -18,6 +19,7 @@ const endpoints = getNetworkEndpoints(NETWORK);
 const derivativesApi = new IndexerGrpcDerivativesApi(endpoints.indexer);
 const oracleApi = new IndexerGrpcOracleApi(endpoints.indexer);
 const portfolioApi = new IndexerGrpcAccountPortfolioApi(endpoints.indexer);
+const chronosDerivativesApi = new IndexerRestDerivativesChronosApi(`${endpoints.chronos}/api/chronos/v1/derivative`);
 
 const USDT_DECIMALS = 6;
 const INJ_DECIMALS = 18;
@@ -128,13 +130,17 @@ export async function fetchAllPrices(markets) {
 
 export async function fetchMarketsSummary() {
   try {
-    const summaries = await derivativesApi.fetchMarketsSummary();
+    const summaries = await chronosDerivativesApi.fetchMarketsSummary();
     const map = {};
     for (const s of summaries) {
       if (!s.marketId) continue;
       const open = Number(s.open ?? 0);
-      const price = Number(s.price ?? s.lastPrice ?? 0);
-      const change24hPct = (open > 0 && price > 0) ? ((price - open) / open) * 100 : 0;
+      const price = Number(s.price ?? 0);
+      // Chronos returns `change` already as a percentage (-0.75 = -0.75%);
+      // fall back to computing from open/price if the field is missing.
+      const change24hPct = Number.isFinite(s.change) && s.change !== 0
+        ? Number(s.change)
+        : (open > 0 && price > 0 ? ((price - open) / open) * 100 : 0);
       map[s.marketId] = { price, open, change24hPct };
     }
     return map;
