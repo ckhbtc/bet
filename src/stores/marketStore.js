@@ -1,8 +1,12 @@
 import { create } from 'zustand';
 import { listMarkets, fetchAllPrices, fetchPositions, fetchMarketsSummary } from '../services/injective';
 
-// Only show USDT perp markets for these symbols
-const FEATURED_SYMBOLS = ['BTC', 'ETH', 'SOL', 'INJ', 'TIA', 'ATOM'];
+// Only show USDT perp markets for these symbols. Order here = display order.
+const FEATURED_SYMBOLS = [
+  'BTC', 'ETH', 'INJ', 'SOL', 'XRP', 'BNB',
+  'TSLA', 'META', 'AAVE', 'COIN', 'AMZN', 'MSTR',
+  'NVDA', 'AAPL', 'GOOGL', 'WIF', 'CRCL', 'HOOD',
+];
 
 const useMarketStore = create((set, get) => ({
   markets: [],
@@ -17,19 +21,12 @@ const useMarketStore = create((set, get) => ({
     try {
       const allMarkets = await listMarkets();
 
-      // Filter to featured USDT perp markets (ticker contains USDT)
-      const featured = allMarkets.filter(m =>
-        FEATURED_SYMBOLS.includes(m.symbol.toUpperCase()) &&
-        m.ticker.toUpperCase().includes('USDT')
-      );
-
-      // Also include any other USDT perps not in featured, up to a total of 8
-      const extra = allMarkets.filter(m =>
-        m.ticker.toUpperCase().includes('USDT') &&
-        !featured.find(f => f.marketId === m.marketId)
-      ).slice(0, Math.max(0, 8 - featured.length));
-
-      const markets = [...featured, ...extra];
+      // Pick the first matching USDT perp per featured symbol, preserving the
+      // declared display order. Symbols missing from chain are silently skipped.
+      const usdtPerps = allMarkets.filter(m => m.ticker.toUpperCase().includes('USDT'));
+      const markets = FEATURED_SYMBOLS
+        .map(sym => usdtPerps.find(m => m.symbol.toUpperCase() === sym))
+        .filter(Boolean);
 
       // Oracle prices + 24h market summary in parallel.
       // Oracle gives the freshest price; summary gives the 24h open used
