@@ -1,9 +1,9 @@
 import useWalletStore from '../stores/walletStore';
 
 const THEME_SEGS = [
-  { id: 'light',   glyph: '☀', label: 'Light' },
-  { id: 'dark',    glyph: '☾', label: 'Dark' },
   { id: 'bauhaus', glyph: '◐', label: 'Bauhaus' },
+  { id: 'dark',    glyph: '☾', label: 'Dark' },
+  { id: 'light',   glyph: '☀', label: 'Light' },
 ];
 
 export default function TopBar({ onNavigate, currentView, theme, onSetTheme, onAddFunds }) {

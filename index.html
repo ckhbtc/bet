@@ -10,16 +10,14 @@
     <link href="https://fonts.googleapis.com/css2?family=Funnel+Display:wght@300..800&family=Onest:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&family=Archivo+Black&family=Familjen+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <script>
       // Set theme BEFORE first paint to avoid FOUC.
-      // Order: localStorage > prefers-color-scheme > 'dark' (preserves prior UX).
+      // Order: localStorage > 'bauhaus' default.
       (function () {
         try {
           var saved = localStorage.getItem('bet-theme');
-          var t = (saved === 'light' || saved === 'dark' || saved === 'bauhaus')
-            ? saved
-            : (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+          var t = (saved === 'light' || saved === 'dark' || saved === 'bauhaus') ? saved : 'bauhaus';
           document.documentElement.dataset.theme = t;
         } catch (e) {
-          document.documentElement.dataset.theme = 'dark';
+          document.documentElement.dataset.theme = 'bauhaus';
         }
       })();
     </script>

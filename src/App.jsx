@@ -1,10 +1,10 @@
 import { useState, useCallback, useEffect } from 'react';
 
-const THEMES = ['light', 'dark', 'bauhaus'];
+const THEMES = ['bauhaus', 'dark', 'light'];
 const readInitialTheme = () => {
-  if (typeof document === 'undefined') return 'dark';
+  if (typeof document === 'undefined') return 'bauhaus';
   const attr = document.documentElement.dataset.theme;
-  return THEMES.includes(attr) ? attr : 'dark';
+  return THEMES.includes(attr) ? attr : 'bauhaus';
 };
 import TopBar from './components/TopBar';
 import MarketCard from './components/MarketCard';
