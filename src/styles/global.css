@@ -217,7 +217,6 @@ input[type="number"] {
 [data-theme="bauhaus"] .theme-toggle .seg.on {
   background: var(--accent);
   color: var(--on-accent);
-  border-radius: 0;
 }
 
 /* ─── Bauhaus theme — structural overrides ─────────────────────────────────

@@ -2,13 +2,13 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "tc-web",
+      "name": "bet-web",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev"],
       "port": 36000
     },
     {
-      "name": "tc-api",
+      "name": "bet-api",
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev:api"],
       "port": 36001
