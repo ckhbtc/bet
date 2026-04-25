@@ -127,7 +127,7 @@ export default function BetPanel({ market, balance, onConfirm, onClose }) {
             >
               <span style={{
                 fontSize: 20, fontWeight: 800, lineHeight: 1,
-                fontFamily: 'var(--font-mono)',
+                fontFamily: 'var(--font-heading)',
                 color: active ? color : 'var(--text-muted)',
               }}>
                 {dir === 'up' ? '↑' : '↓'}
@@ -158,7 +158,8 @@ export default function BetPanel({ market, balance, onConfirm, onClose }) {
             style={{
               width: '100%', background: 'var(--bg-primary)', border: '1px solid var(--border)',
               borderRadius: 10, padding: '14px 14px 14px 32px', color: 'var(--text-primary)',
-              fontSize: 20, fontWeight: 600, fontFamily: 'var(--font-mono)', outline: 'none',
+              fontSize: 20, fontWeight: 600, fontFamily: 'var(--font-heading)',
+              fontVariantNumeric: 'tabular-nums', outline: 'none',
             }}
           />
         </div>
@@ -171,7 +172,7 @@ export default function BetPanel({ market, balance, onConfirm, onClose }) {
                 flex: 1, background: stakeNum === amt ? 'var(--accent-dim)' : 'var(--bg-primary)',
                 border: `1px solid ${stakeNum === amt ? 'var(--accent)' : 'var(--border)'}`,
                 borderRadius: 6, padding: '6px 0', color: stakeNum === amt ? 'var(--accent)' : 'var(--text-muted)',
-                fontSize: 12, fontWeight: 500, cursor: 'pointer', fontFamily: 'var(--font-mono)',
+                fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-heading)',
               }}
             >${amt}</button>
           ))}
@@ -198,7 +199,8 @@ export default function BetPanel({ market, balance, onConfirm, onClose }) {
             style={{
               width: '100%', background: 'var(--bg-primary)', border: '1px solid var(--border)',
               borderRadius: 10, padding: '14px 14px 14px 32px', color: 'var(--green)',
-              fontSize: 20, fontWeight: 600, fontFamily: 'var(--font-mono)', outline: 'none',
+              fontSize: 20, fontWeight: 600, fontFamily: 'var(--font-heading)',
+              fontVariantNumeric: 'tabular-nums', outline: 'none',
             }}
           />
         </div>
