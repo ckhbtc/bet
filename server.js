@@ -22,4 +22,5 @@ app.get(/^(?!\/api\/).*/, (req, res) => {
   res.sendFile(join(__dirname, 'dist', 'index.html'));
 });
 
-app.listen(36000, () => console.log('INJ Bet running on port 36000'));
+const PORT = parseInt(process.env.PORT || '36000', 10);
+app.listen(PORT, () => console.log(`INJ Bet running on port ${PORT}`));
