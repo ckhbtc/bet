@@ -28,7 +28,7 @@ export default function AuthZSetup() {
         Enable autosign
       </div>
       <div style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: 16 }}>
-        Sign once to authorize trading from this app for 3 days — no wallet popup per bet.
+        Sign once to authorize trading from this app – no wallet popup per bet.
       </div>
 
       <ul style={{
@@ -37,9 +37,9 @@ export default function AuthZSetup() {
       }}>
         <li>· Funds stay in your wallet</li>
         <li>· Permission limited to derivative trading messages</li>
-        <li>· Auto-expires in 3 days, revoke anytime</li>
-        <li>· Gas-free trading via fee delegation</li>
-        <li>· Authorized key stored only on this device — never sent to our server</li>
+        <li>· Revoke anytime</li>
+        <li>· Gas-free trading</li>
+        <li>· Authorized key stored only on this device</li>
       </ul>
 
       <button

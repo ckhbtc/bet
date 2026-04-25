@@ -36,7 +36,10 @@ const GRANT_MSG_TYPES = [
   '/injective.exchange.v1beta1.MsgIncreasePositionMargin',
 ];
 
-const GRANT_DURATION_S = 60 * 60 * 24 * 3; // 3 days
+// "Indefinite" grant — far enough future that no real user will hit it.
+// Year 2099 in seconds-since-epoch. The grant lives until the user clears
+// localStorage, disconnects, or signs a MsgRevoke on-chain.
+const GRANT_EXPIRATION_S = 4_070_908_800; // 2099-01-01T00:00:00Z
 
 function hexToBytes(hex) {
   const bytes = new Uint8Array(hex.length / 2);
@@ -116,7 +119,7 @@ export async function grantAuthZ(injAddress, onProgress) {
     await window.ethereum.request({ method: 'eth_chainId' }), 16
   );
 
-  const expiration = Math.floor(Date.now() / 1000) + GRANT_DURATION_S;
+  const expiration = GRANT_EXPIRATION_S;
 
   const msgGrants = GRANT_MSG_TYPES.map(msgType =>
     MsgGrant.fromJSON({
