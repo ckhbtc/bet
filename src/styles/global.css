@@ -66,6 +66,38 @@
   --overlay:       rgba(0, 0, 0, 0.7);
 }
 
+/*
+ * Bauhaus theme — constructivist poster palette.
+ * Maps to the same CSS variable surface but with primary red/blue/yellow on
+ * cream paper. Component-level overrides below flatten radii, thicken
+ * borders to 3px, and swap the heading font to Archivo Black.
+ */
+[data-theme="bauhaus"] {
+  --bg-primary:    #f0e9d6;
+  --bg-secondary:  #e8e0c8;
+  --bg-card:       #faf6e8;
+  --bg-card-hover: #f5efd8;
+  --border:        #1a1612;
+  --border-light:  #1a1612;
+  --text-primary:   #1a1612;
+  --text-secondary: #3a342c;
+  --text-muted:     #6e6759;
+  --accent:        #e23b22;
+  --accent-light:  #f5c842;
+  --accent-dim:    #f5c842;
+  --accent-grad:   #e23b22;
+  --on-accent:     #faf6e8;
+  --green:         #2e6e3a;
+  --green-dim:     rgba(46, 110, 58, 0.18);
+  --red:           #c43030;
+  --red-dim:       rgba(196, 48, 48, 0.18);
+  --blue:          #1d3a6c;
+  --blue-grad:     #1d3a6c;
+  --overlay:       rgba(26, 22, 18, 0.55);
+  --font-heading:  'Archivo Black', 'Funnel Display', sans-serif;
+  --font-body:     'Familjen Grotesk', 'Onest', sans-serif;
+}
+
 html, body {
   transition: background 0.3s ease, color 0.3s ease;
 }
@@ -138,43 +170,136 @@ input[type="number"] {
   100% { transform: translateY(0); opacity: 1; }
 }
 
-/* ─── Theme toggle (sun/moon pill) ────────────────────────────────────────── */
+/* ─── Theme toggle (3-segment pill: light / dark / bauhaus) ──────────────── */
 
 .theme-toggle {
   background: var(--bg-card);
   border: 1px solid var(--border-light);
   border-radius: 999px;
-  width: 44px;
-  height: 26px;
-  display: flex;
+  height: 28px;
+  display: inline-flex;
   align-items: center;
   padding: 2px;
   cursor: pointer;
-  transition: all 0.25s;
+  transition: border-color 0.2s;
   flex-shrink: 0;
+  gap: 0;
 }
 .theme-toggle:hover { border-color: var(--accent); }
 
-.theme-toggle-thumb {
-  width: 20px;
-  height: 20px;
+.theme-toggle .seg {
+  width: 24px;
+  height: 24px;
   border-radius: 50%;
-  background: var(--text-primary);
-  transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.25s;
-  display: flex;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--bg-primary);
-  font-size: 11px;
+  color: var(--text-muted);
+  font-size: 12px;
   line-height: 1;
+  padding: 0;
+  transition: background 0.2s, color 0.2s;
+  font-family: 'JetBrains Mono', monospace;
 }
-[data-theme="dark"] .theme-toggle-thumb {
-  transform: translateX(18px);
+.theme-toggle .seg:hover { color: var(--text-primary); }
+.theme-toggle .seg.on {
+  background: var(--text-primary);
+  color: var(--bg-primary);
+}
+[data-theme="dark"] .theme-toggle .seg.on {
   background: var(--accent-grad);
-  box-shadow: 0 0 10px rgba(0, 212, 255, 0.4);
+  color: var(--on-accent);
+  box-shadow: 0 0 10px rgba(0, 212, 255, 0.35);
+}
+[data-theme="bauhaus"] .theme-toggle .seg.on {
+  background: var(--accent);
+  color: var(--on-accent);
+  border-radius: 0;
 }
 
-.theme-toggle .icon-sun  { display: block; }
-.theme-toggle .icon-moon { display: none; }
-[data-theme="dark"] .theme-toggle .icon-sun  { display: none; }
-[data-theme="dark"] .theme-toggle .icon-moon { display: block; }
+/* ─── Bauhaus theme — structural overrides ─────────────────────────────────
+ * The components use CSS variables for color, so palette flips automatically.
+ * These rules flatten radii, thicken borders, and convert the rounded SaaS
+ * vibe into a constructivist poster vibe. Inline styles in components force
+ * !important on the geometry rules.
+ */
+[data-theme="bauhaus"] body {
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 300 300' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.06'/%3E%3C/svg%3E");
+}
+
+[data-theme="bauhaus"] h1,
+[data-theme="bauhaus"] h2,
+[data-theme="bauhaus"] h3,
+[data-theme="bauhaus"] h4 {
+  font-family: 'Archivo Black', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+  font-weight: 900;
+}
+
+/* Flatten every rounded panel/button to 0 radius and thicken borders to 3px
+ * where they're touching the page background. Inline styles win specificity
+ * battles, so target the inline-styled containers via attribute selectors. */
+[data-theme="bauhaus"] [style*="border-radius"],
+[data-theme="bauhaus"] [style*="borderRadius"] {
+  border-radius: 0 !important;
+}
+[data-theme="bauhaus"] [style*="border: 1px"],
+[data-theme="bauhaus"] [style*="border:1px"] {
+  border-width: 2px !important;
+}
+[data-theme="bauhaus"] [style*="border: 2px"],
+[data-theme="bauhaus"] [style*="border:2px"] {
+  border-width: 3px !important;
+}
+
+/* Section headlines: pop them with the ink/yellow poster look. */
+[data-theme="bauhaus"] h1 {
+  background: #1a1612;
+  color: #f5c842;
+  display: inline-block;
+  padding: 0.2em 0.5em 0.25em;
+  margin-bottom: 0.4em !important;
+  font-size: 2.4rem !important;
+  letter-spacing: 0 !important;
+}
+
+/* Pill toggle keeps its rounded shape (it's a control, not a panel). */
+[data-theme="bauhaus"] .theme-toggle {
+  border-radius: 999px !important;
+  border-width: 2px !important;
+  border-color: #1a1612 !important;
+  background: #faf6e8 !important;
+}
+
+/* Decorative geometric stamp on every card-shaped element. */
+[data-theme="bauhaus"] .bauhaus-deco {
+  position: relative;
+  overflow: hidden;
+}
+[data-theme="bauhaus"] .bauhaus-deco::after {
+  content: '';
+  position: absolute;
+  bottom: -22px;
+  right: -22px;
+  width: 64px;
+  height: 64px;
+  border-radius: 50% !important;
+  background: var(--accent-light);
+  pointer-events: none;
+  z-index: 0;
+}
+[data-theme="bauhaus"] .bauhaus-deco > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* Sharp focus rings instead of soft. */
+[data-theme="bauhaus"] button:focus-visible,
+[data-theme="bauhaus"] input:focus-visible {
+  outline: 3px solid #1a1612;
+  outline-offset: 2px;
+}

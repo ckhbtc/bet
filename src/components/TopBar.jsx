@@ -1,6 +1,12 @@
 import useWalletStore from '../stores/walletStore';
 
-export default function TopBar({ onNavigate, currentView, theme, onToggleTheme, onAddFunds }) {
+const THEME_SEGS = [
+  { id: 'light',   glyph: '☀', label: 'Light' },
+  { id: 'dark',    glyph: '☾', label: 'Dark' },
+  { id: 'bauhaus', glyph: '◐', label: 'Bauhaus' },
+];
+
+export default function TopBar({ onNavigate, currentView, theme, onSetTheme, onAddFunds }) {
   const { connected, connecting, ethAddress, injAddress, usdtBalance, connect, disconnect, error } = useWalletStore();
 
   return (
@@ -57,17 +63,21 @@ export default function TopBar({ onNavigate, currentView, theme, onToggleTheme, 
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-        <button
-          className="theme-toggle"
-          onClick={onToggleTheme}
-          aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-          title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
-        >
-          <span className="theme-toggle-thumb">
-            <span className="icon-sun">☀</span>
-            <span className="icon-moon">☾</span>
-          </span>
-        </button>
+        <div className="theme-toggle" role="group" aria-label="Theme">
+          {THEME_SEGS.map(seg => (
+            <button
+              key={seg.id}
+              type="button"
+              onClick={() => onSetTheme(seg.id)}
+              className={`seg ${theme === seg.id ? 'on' : ''}`}
+              aria-pressed={theme === seg.id}
+              aria-label={`${seg.label} theme`}
+              title={`${seg.label} theme`}
+            >
+              {seg.glyph}
+            </button>
+          ))}
+        </div>
         {connected ? (
           <>
             <button

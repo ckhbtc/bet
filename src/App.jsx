@@ -1,9 +1,10 @@
 import { useState, useCallback, useEffect } from 'react';
 
+const THEMES = ['light', 'dark', 'bauhaus'];
 const readInitialTheme = () => {
   if (typeof document === 'undefined') return 'dark';
   const attr = document.documentElement.dataset.theme;
-  return attr === 'light' || attr === 'dark' ? attr : 'dark';
+  return THEMES.includes(attr) ? attr : 'dark';
 };
 import TopBar from './components/TopBar';
 import MarketCard from './components/MarketCard';
@@ -36,8 +37,8 @@ export default function App() {
     try { localStorage.setItem('bet-theme', theme); } catch { /* ignore */ }
   }, [theme]);
 
-  const toggleTheme = useCallback(() => {
-    setTheme(t => t === 'dark' ? 'light' : 'dark');
+  const setThemeTo = useCallback((next) => {
+    if (THEMES.includes(next)) setTheme(next);
   }, []);
 
   const { connected, injAddress, usdtBalance, refreshBalances } = useWalletStore();
@@ -127,7 +128,7 @@ export default function App() {
 
   return (
     <>
-      <TopBar onNavigate={setView} currentView={view} theme={theme} onToggleTheme={toggleTheme} onAddFunds={() => setShowBridge(true)} />
+      <TopBar onNavigate={setView} currentView={view} theme={theme} onSetTheme={setThemeTo} onAddFunds={() => setShowBridge(true)} />
 
       {/* Transaction status toast */}
       {confetti && <Confetti />}

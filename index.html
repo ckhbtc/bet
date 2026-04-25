@@ -7,14 +7,14 @@
     <title>INJ Bet — Bet on Crypto</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Funnel+Display:wght@300..800&family=Onest:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Funnel+Display:wght@300..800&family=Onest:wght@300;400;500;600;700&family=JetBrains+Mono:wght@300;400;500;600&family=Archivo+Black&family=Familjen+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet" />
     <script>
       // Set theme BEFORE first paint to avoid FOUC.
       // Order: localStorage > prefers-color-scheme > 'dark' (preserves prior UX).
       (function () {
         try {
           var saved = localStorage.getItem('bet-theme');
-          var t = (saved === 'light' || saved === 'dark')
+          var t = (saved === 'light' || saved === 'dark' || saved === 'bauhaus')
             ? saved
             : (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
           document.documentElement.dataset.theme = t;
@@ -26,6 +26,7 @@
     <style>
       html { background: #f7f3ec; color: #1f1a13; }
       html[data-theme="dark"] { background: #07090e; color: #e8ecf6; }
+      html[data-theme="bauhaus"] { background: #f0e9d6; color: #1a1612; }
     </style>
   </head>
   <body>

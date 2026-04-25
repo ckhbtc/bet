@@ -7,6 +7,7 @@ export default function MarketCard({ market, onPlaceBet }) {
 
   return (
     <div
+      className="bauhaus-deco"
       onClick={() => onPlaceBet(market)}
       style={{
         background: 'var(--bg-card)',
@@ -18,6 +19,7 @@ export default function MarketCard({ market, onPlaceBet }) {
         display: 'flex',
         flexDirection: 'column',
         gap: 16,
+        position: 'relative',
       }}
       onMouseEnter={e => {
         e.currentTarget.style.background = 'var(--bg-card-hover)';
