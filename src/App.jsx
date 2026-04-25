@@ -285,7 +285,7 @@ export default function App() {
                     fontSize: 14, fontWeight: 600, fontFamily: 'var(--font-mono)',
                     color: pos.pnl >= 0 ? 'var(--green)' : 'var(--red)',
                   }}>
-                    {pos.pnl >= 0 ? '+' : ''}${pos.pnl.toFixed(2)}
+                    {pos.pnl >= 0 ? '+' : '-'}${Math.abs(pos.pnl).toFixed(2)}
                   </span>
                 </div>
               ))}

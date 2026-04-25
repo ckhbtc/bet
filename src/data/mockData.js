@@ -24,7 +24,7 @@ export function formatPrice(price) {
 }
 
 export function formatDollar(amount) {
-  const sign = amount >= 0 ? '+' : '';
+  const sign = amount >= 0 ? '+' : '-';
   return `${sign}$${Math.abs(amount).toFixed(2)}`;
 }
 
