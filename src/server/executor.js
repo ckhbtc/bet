@@ -18,6 +18,8 @@ import {
 import { getNetworkEndpoints, Network } from '@injectivelabs/networks';
 import Decimal from 'decimal.js';
 import crypto from 'crypto';
+import fs from 'fs';
+import path from 'path';
 
 const NETWORK = Network.MainnetSentry;
 const endpoints = getNetworkEndpoints(NETWORK);
@@ -27,11 +29,50 @@ const derivativesApi = new IndexerGrpcDerivativesApi(endpoints.indexer);
 const QUOTE_SCALE = new Decimal(10).pow(6);
 
 // ─── Sessions ───────────────────────────────────────────────────────────────
+//
+// Sessions are persisted to a JSON file so a server restart (PM2 redeploy)
+// doesn't force every connected user to re-sign their AuthZ grant. The grantee
+// private key inside is *ephemeral and scoped* (time-limited AuthZ on a
+// trading message-type), so the threat model is comparable to FAUCET_PRIVATE_KEY
+// already living in .env. The file is chmod 600 by us on write.
 
 const _sessions = new Map(); // granterAddress → SessionState
 const _tokens = new Map();   // sessionToken → granterAddress
 
+const SESSIONS_FILE = process.env.SESSIONS_FILE
+  || path.join(process.cwd(), 'sessions.json');
+
 function nowSec() { return Math.floor(Date.now() / 1000); }
+
+function persistSessions() {
+  try {
+    const data = JSON.stringify({ sessions: [..._sessions.values()] });
+    fs.writeFileSync(SESSIONS_FILE, data, { mode: 0o600 });
+  } catch (err) {
+    console.error('persistSessions failed:', err.message);
+  }
+}
+
+function loadSessions() {
+  try {
+    if (!fs.existsSync(SESSIONS_FILE)) return;
+    const raw = fs.readFileSync(SESSIONS_FILE, 'utf8');
+    const { sessions = [] } = JSON.parse(raw);
+    const now = nowSec();
+    let pruned = 0;
+    for (const s of sessions) {
+      if (!s || !s.granterAddress || !s.sessionToken) continue;
+      if (s.expiration <= now) { pruned += 1; continue; }
+      _sessions.set(s.granterAddress, s);
+      _tokens.set(s.sessionToken, s.granterAddress);
+    }
+    console.log(`loadSessions: restored ${_sessions.size} active session(s)${pruned ? `, pruned ${pruned} expired` : ''}`);
+  } catch (err) {
+    console.error('loadSessions failed:', err.message);
+  }
+}
+
+loadSessions();
 
 export function activateSession({
   privateKeyHex, granteeAddress, granterAddress, ethAddress, evmChainId, expiration,
@@ -49,6 +90,7 @@ export function activateSession({
   };
   _sessions.set(granterAddress, session);
   _tokens.set(sessionToken, granterAddress);
+  persistSessions();
   return { sessionToken, expiration };
 }
 
@@ -56,6 +98,7 @@ export function deactivateSession(granterAddress) {
   const s = _sessions.get(granterAddress);
   if (s) _tokens.delete(s.sessionToken);
   _sessions.delete(granterAddress);
+  persistSessions();
 }
 
 export function getSessionByToken(token) {
