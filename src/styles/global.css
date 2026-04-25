@@ -241,9 +241,10 @@ input[type="number"] {
 
 /* Flatten every rounded panel/button to 0 radius and thicken borders to 3px
  * where they're touching the page background. Inline styles win specificity
- * battles, so target the inline-styled containers via attribute selectors. */
-[data-theme="bauhaus"] [style*="border-radius"],
-[data-theme="bauhaus"] [style*="borderRadius"] {
+ * battles, so target the inline-styled containers via attribute selectors.
+ * Preserve true circles (50% radius) — logos/avatars/decorations stay round. */
+[data-theme="bauhaus"] [style*="border-radius"]:not([style*="50%"]),
+[data-theme="bauhaus"] [style*="borderRadius"]:not([style*="50%"]) {
   border-radius: 0 !important;
 }
 [data-theme="bauhaus"] [style*="border: 1px"],
