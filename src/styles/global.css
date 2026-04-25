@@ -266,11 +266,10 @@ input[type="number"] {
   letter-spacing: 0 !important;
 }
 
-/* Pill toggle keeps its rounded shape (it's a control, not a panel). */
+/* Pill toggle keeps its rounded shape and 1px hairline (it's a control, not a
+ * panel). Matches the light/dark proportions so the active seg fills flush. */
 [data-theme="bauhaus"] .theme-toggle {
   border-radius: 999px !important;
-  border-width: 2px !important;
-  border-color: #1a1612 !important;
   background: #faf6e8 !important;
 }
 
