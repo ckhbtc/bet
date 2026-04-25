@@ -149,22 +149,26 @@ export async function executeBridge(amount, senderEvm, recipientEvm, onProgress)
   onProgress?.('Switching to Arbitrum...');
   await switchToArbitrum();
 
-  onProgress?.('Step 1 of 2 — Approve USDC');
-  const approveData = encodeApprove(raw.tx.to, BigInt(srcAmountBase));
-  const approveTxHash = await sendMM({
-    from: senderEvm, to: BRIDGE_SRC_TOKEN, data: approveData,
-  });
+  let approveTxHash;
+  let bridgeTxHash;
+  try {
+    onProgress?.('Step 1 of 2 — Approve USDC');
+    const approveData = encodeApprove(raw.tx.to, BigInt(srcAmountBase));
+    approveTxHash = await sendMM({
+      from: senderEvm, to: BRIDGE_SRC_TOKEN, data: approveData,
+    });
 
-  onProgress?.(`Approval sent (${approveTxHash.slice(0, 10)}...), confirming...`);
-  await waitForReceipt(approveTxHash);
+    onProgress?.(`Approval sent (${approveTxHash.slice(0, 10)}...), confirming...`);
+    await waitForReceipt(approveTxHash);
 
-  onProgress?.('Step 2 of 2 — Bridge transaction');
-  const bridgeTxHash = await sendMM({
-    from: senderEvm, to: raw.tx.to, data: raw.tx.data,
-    value: raw.tx.value ?? raw.fixFee,
-  });
-
-  await switchBackTo(originalChainId);
+    onProgress?.('Step 2 of 2 — Bridge transaction');
+    bridgeTxHash = await sendMM({
+      from: senderEvm, to: raw.tx.to, data: raw.tx.data,
+      value: raw.tx.value ?? raw.fixFee,
+    });
+  } finally {
+    await switchBackTo(originalChainId);
+  }
 
   return {
     approveTxHash,

@@ -12,6 +12,14 @@ function clearSession() {
   })).catch(() => {});
 }
 
+let unsubscribeAccountsChanged = null;
+
+function clearAccountsChangedListener() {
+  if (!unsubscribeAccountsChanged) return;
+  unsubscribeAccountsChanged();
+  unsubscribeAccountsChanged = null;
+}
+
 const useWalletStore = create((set, get) => ({
   ethAddress: null,
   injAddress: null,
@@ -37,8 +45,10 @@ const useWalletStore = create((set, get) => ({
       get().refreshBalances();
 
       // Listen for account changes from the wallet itself.
-      onAccountsChanged((info) => {
+      clearAccountsChangedListener();
+      unsubscribeAccountsChanged = onAccountsChanged((info) => {
         if (!info) {
+          clearAccountsChangedListener();
           clearSession();
           set({ ethAddress: null, injAddress: null, subaccountId: null, connected: false, balances: null, usdtBalance: 0 });
         } else if (info.injAddress !== get().injAddress) {
@@ -59,6 +69,7 @@ const useWalletStore = create((set, get) => ({
   },
 
   disconnect: () => {
+    clearAccountsChangedListener();
     clearSession();
     set({
       ethAddress: null,
