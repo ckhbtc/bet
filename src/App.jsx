@@ -30,6 +30,10 @@ export default function App() {
   const [confetti, setConfetti] = useState(false);
   const [showBridge, setShowBridge] = useState(false);
   const [theme, setTheme] = useState(readInitialTheme);
+  const [devMode, setDevMode] = useState(() => {
+    if (typeof localStorage === 'undefined') return false;
+    return localStorage.getItem('bet-dev-mode') === '1';
+  });
 
   // Sync theme to <html data-theme> + localStorage
   useEffect(() => {
@@ -39,6 +43,30 @@ export default function App() {
 
   const setThemeTo = useCallback((next) => {
     if (THEMES.includes(next)) setTheme(next);
+  }, []);
+
+  // D-E-V keystroke (sequence within ~1.5s, ignored while typing in form fields) toggles devMode.
+  useEffect(() => {
+    let buf = '';
+    let timer = null;
+    const onKey = (e) => {
+      const tag = e.target.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target.isContentEditable) return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      buf = (buf + e.key.toUpperCase()).slice(-3);
+      if (buf === 'DEV') {
+        setDevMode(d => {
+          const next = !d;
+          try { localStorage.setItem('bet-dev-mode', next ? '1' : '0'); } catch { /* ignore */ }
+          return next;
+        });
+        buf = '';
+      }
+      clearTimeout(timer);
+      timer = setTimeout(() => { buf = ''; }, 1500);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => { window.removeEventListener('keydown', onKey); clearTimeout(timer); };
   }, []);
 
   const { connected, injAddress, usdtBalance, refreshBalances } = useWalletStore();
@@ -126,9 +154,43 @@ export default function App() {
     }
   }, [connected, refreshBalances]);
 
+  // Sequential close — avoids nonce races on the same wallet. One failure
+  // doesn't abort the rest; the final toast summarizes successes vs failures.
+  const handleCashOutAll = useCallback(async () => {
+    if (!connected) return;
+    const list = useMarketStore.getState().positions.filter(p => p.market);
+    if (!list.length) return;
+    let ok = 0;
+    let fail = 0;
+    for (let i = 0; i < list.length; i++) {
+      const pos = list[i];
+      setTxStatus({ type: 'loading', message: `Closing ${i + 1}/${list.length}: ${pos.asset}...` });
+      try {
+        await api.tradeClose({
+          marketId: pos.marketId,
+          side: pos.side,
+          quantity: pos.quantity,
+        });
+        ok += 1;
+      } catch (err) {
+        fail += 1;
+        console.error(`cash-out-all: ${pos.asset} failed`, err);
+      }
+    }
+    setTxStatus({
+      type: fail === 0 ? 'success' : 'error',
+      message: fail === 0
+        ? `Closed ${ok} position${ok === 1 ? '' : 's'}`
+        : `Closed ${ok}, ${fail} failed`,
+    });
+    refreshBalances();
+    useMarketStore.getState().fetchPositions(useWalletStore.getState().injAddress);
+    setTimeout(() => setTxStatus(null), 5000);
+  }, [connected, refreshBalances]);
+
   return (
     <>
-      <TopBar onNavigate={setView} currentView={view} theme={theme} onSetTheme={setThemeTo} onAddFunds={() => setShowBridge(true)} />
+      <TopBar onNavigate={setView} currentView={view} theme={theme} onSetTheme={setThemeTo} onAddFunds={() => setShowBridge(true)} devMode={devMode} />
 
       {/* Transaction status toast */}
       {confetti && <Confetti />}
@@ -236,7 +298,12 @@ export default function App() {
                 </p>
               </div>
               {connected ? (
-                <ActiveBets bets={positions} onCashOut={handleCashOut} />
+                <ActiveBets
+                  bets={positions}
+                  onCashOut={handleCashOut}
+                  onCashOutAll={handleCashOutAll}
+                  devMode={devMode}
+                />
               ) : (
                 <div style={{ textAlign: 'center', padding: '60px 20px', color: 'var(--text-muted)', fontSize: 14 }}>
                   Connect wallet to see your positions.

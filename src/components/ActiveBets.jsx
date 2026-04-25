@@ -8,7 +8,7 @@ const STATUS_CONFIG = {
   close:   { label: 'CLOSE',   bg: 'var(--accent-dim)', border: 'var(--accent)', color: 'var(--accent)' },
 };
 
-export default function ActiveBets({ bets, onCashOut }) {
+export default function ActiveBets({ bets, onCashOut, onCashOutAll, devMode }) {
   if (!bets.length) {
     return (
       <div style={{
@@ -22,6 +22,21 @@ export default function ActiveBets({ bets, onCashOut }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {devMode && (
+        <button
+          onClick={onCashOutAll}
+          style={{
+            background: 'var(--red-dim)',
+            border: '1px solid var(--red)',
+            borderRadius: 8,
+            padding: '12px 0',
+            color: 'var(--red)',
+            fontSize: 14, fontWeight: 700, cursor: 'pointer',
+            fontFamily: 'var(--font-heading)',
+            letterSpacing: 0.5,
+          }}
+        >Cash Out All ({bets.length})</button>
+      )}
       {bets.map(bet => {
         const status = STATUS_CONFIG[bet.status] || STATUS_CONFIG.close;
         const isPositive = bet.pnl >= 0;
@@ -148,7 +163,7 @@ export default function ActiveBets({ bets, onCashOut }) {
                     fontSize: 13, fontWeight: 600, cursor: 'pointer',
                     fontFamily: 'var(--font-heading)',
                   }}
-                >Close Position ({formatDollar(bet.pnl)})</button>
+                >{devMode ? 'Cash Out' : 'Close Position'} ({formatDollar(bet.pnl)})</button>
               </div>
             </div>
           </div>

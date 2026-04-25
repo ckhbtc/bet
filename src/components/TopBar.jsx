@@ -6,7 +6,7 @@ const THEME_SEGS = [
   { id: 'light',   glyph: '☀', label: 'Light' },
 ];
 
-export default function TopBar({ onNavigate, currentView, theme, onSetTheme, onAddFunds }) {
+export default function TopBar({ onNavigate, currentView, theme, onSetTheme, onAddFunds, devMode }) {
   const { connected, connecting, ethAddress, injAddress, usdtBalance, connect, disconnect, error } = useWalletStore();
 
   return (
@@ -63,6 +63,20 @@ export default function TopBar({ onNavigate, currentView, theme, onSetTheme, onA
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        {devMode && (
+          <span
+            title="Dev mode active — type D-E-V to toggle off"
+            style={{
+              fontSize: 10, fontWeight: 700,
+              padding: '4px 8px', borderRadius: 4,
+              background: 'var(--red-dim)', color: 'var(--red)',
+              border: '1px solid var(--red)',
+              fontFamily: 'var(--font-mono)',
+              letterSpacing: 1.5,
+              textTransform: 'uppercase',
+            }}
+          >DEV</span>
+        )}
         <div className="theme-toggle" role="group" aria-label="Theme">
           {THEME_SEGS.map(seg => (
             <button
