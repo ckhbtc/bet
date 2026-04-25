@@ -163,7 +163,7 @@ export default function ActiveBets({ bets, onCashOut, onCashOutAll, devMode }) {
                     fontSize: 13, fontWeight: 600, cursor: 'pointer',
                     fontFamily: 'var(--font-heading)',
                   }}
-                >{devMode ? 'Cash Out' : 'Close Position'} ({formatDollar(bet.pnl)})</button>
+                >Cash Out ({formatDollar(bet.pnl)})</button>
               </div>
             </div>
           </div>
