@@ -1,8 +1,15 @@
 import { create } from 'zustand';
-import { api, getSessionToken, setSessionToken } from '../services/api';
 import { grantAuthZ } from '../services/autosign';
+import { getGrantee, setGrantee, clearGrantee } from '../services/grantee';
+import { api } from '../services/api';
 
-const useSessionStore = create((set, get) => ({
+/**
+ * Session = "is there a non-expired grantee key stored locally for the
+ * currently-connected wallet?". No server roundtrip — the key never
+ * leaves the browser. Trades are signed and broadcast directly to the
+ * Injective fee-delegation relay using the stored privateKeyHex.
+ */
+const useSessionStore = create((set) => ({
   active: false,
   expiration: null,
   granterAddress: null,
@@ -10,31 +17,17 @@ const useSessionStore = create((set, get) => ({
   status: '',
   error: null,
 
-  refresh: async (expectedInjAddress = null) => {
-    if (!getSessionToken()) {
+  refresh: (expectedInjAddress = null) => {
+    if (!expectedInjAddress) {
       set({ active: false, expiration: null, granterAddress: null });
       return;
     }
-    try {
-      const r = await api.sessionCheck();
-      if (!r.active) {
-        setSessionToken(null);
-        set({ active: false, expiration: null, granterAddress: null });
-        return;
-      }
-      // Session belongs to a different wallet than the one currently connected —
-      // possible when a user swaps MetaMask accounts. Refuse to surface it as
-      // "active" or the next trade would be signed against the wrong wallet.
-      if (expectedInjAddress && r.granterAddress && r.granterAddress !== expectedInjAddress) {
-        setSessionToken(null);
-        set({ active: false, expiration: null, granterAddress: null });
-        return;
-      }
-      set({ active: true, expiration: r.expiration, granterAddress: r.granterAddress });
-    } catch {
-      setSessionToken(null);
+    const entry = getGrantee(expectedInjAddress);
+    if (!entry) {
       set({ active: false, expiration: null, granterAddress: null });
+      return;
     }
+    set({ active: true, expiration: entry.expiration, granterAddress: entry.granterAddress });
   },
 
   grant: async ({ injAddress, ethAddress }) => {
@@ -42,18 +35,17 @@ const useSessionStore = create((set, get) => ({
 
     const runGrant = async () => {
       const result = await grantAuthZ(injAddress, (msg) => set({ status: msg }));
-      const resp = await api.activate({
+      setGrantee({
         privateKeyHex: result.privateKeyHex,
-        injectiveAddress: result.injectiveAddress,
+        granteeAddress: result.injectiveAddress,
         granterAddress: injAddress,
         ethAddress,
         evmChainId: result.evmChainId,
         expiration: result.expiration,
       });
-      setSessionToken(resp.sessionToken);
       set({
         active: true,
-        expiration: resp.expiration,
+        expiration: result.expiration,
         granterAddress: injAddress,
         granting: false,
         status: 'Autosign active.',
@@ -86,13 +78,10 @@ const useSessionStore = create((set, get) => ({
     }
   },
 
-  deactivate: async () => {
-    try { await api.sessionDeactivate(); } catch { /* ignore */ }
-    setSessionToken(null);
+  deactivate: (granterAddress) => {
+    if (granterAddress) clearGrantee(granterAddress);
     set({ active: false, expiration: null, granterAddress: null, status: '' });
   },
 }));
-
-useSessionStore.getState().refresh();
 
 export default useSessionStore;

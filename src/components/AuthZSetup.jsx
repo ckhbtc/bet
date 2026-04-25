@@ -39,6 +39,7 @@ export default function AuthZSetup() {
         <li>· Permission limited to derivative trading messages</li>
         <li>· Auto-expires in 3 days, revoke anytime</li>
         <li>· Gas-free trading via fee delegation</li>
+        <li>· Authorized key stored only on this device — never sent to our server</li>
       </ul>
 
       <button

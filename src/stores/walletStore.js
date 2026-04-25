@@ -1,12 +1,11 @@
 import { create } from 'zustand';
 import { connectWallet, onAccountsChanged } from '../services/wallet';
 import { fetchBalances } from '../services/injective';
-import { setSessionToken } from '../services/api';
+import { clearGrantee } from '../services/grantee';
 
-// Load sessionStore lazily — it imports walletStore indirectly via api.js,
-// and we want to avoid a circular module init.
-function clearSession() {
-  setSessionToken(null);
+// Load sessionStore lazily to avoid circular module init.
+function clearSession(granterAddress) {
+  if (granterAddress) clearGrantee(granterAddress);
   import('./sessionStore').then(m => m.default.setState({
     active: false, expiration: null, granterAddress: null, status: '', error: null,
   })).catch(() => {});
@@ -38,7 +37,7 @@ const useWalletStore = create((set, get) => ({
 
       // If the connected wallet changed (or is new), wipe any lingering session
       // bound to a previous granter before we expose the new wallet state.
-      if (prevInjAddress && prevInjAddress !== injAddress) clearSession();
+      if (prevInjAddress && prevInjAddress !== injAddress) clearSession(prevInjAddress);
 
       set({ ethAddress, injAddress, subaccountId, connected: true, connecting: false });
 
@@ -47,13 +46,14 @@ const useWalletStore = create((set, get) => ({
       // Listen for account changes from the wallet itself.
       clearAccountsChangedListener();
       unsubscribeAccountsChanged = onAccountsChanged((info) => {
+        const prev = get().injAddress;
         if (!info) {
           clearAccountsChangedListener();
-          clearSession();
+          clearSession(prev);
           set({ ethAddress: null, injAddress: null, subaccountId: null, connected: false, balances: null, usdtBalance: 0 });
-        } else if (info.injAddress !== get().injAddress) {
+        } else if (info.injAddress !== prev) {
           // Different wallet swapped in — the old session must not carry over.
-          clearSession();
+          clearSession(prev);
           set({ ethAddress: info.ethAddress, injAddress: info.injAddress, subaccountId: info.subaccountId, balances: null, usdtBalance: 0 });
           get().refreshBalances();
         } else {
@@ -70,7 +70,7 @@ const useWalletStore = create((set, get) => ({
 
   disconnect: () => {
     clearAccountsChangedListener();
-    clearSession();
+    clearSession(get().injAddress);
     set({
       ethAddress: null,
       injAddress: null,

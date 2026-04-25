@@ -16,7 +16,7 @@ import AuthZSetup from './components/AuthZSetup';
 import BridgeModal from './components/BridgeModal';
 import Confetti from './components/Confetti';
 import { AGGRESSIVENESS } from './data/mockData';
-import { api } from './services/api';
+import { tradeOpen, tradeClose } from './services/trade';
 import useWalletStore from './stores/walletStore';
 import useMarketStore from './stores/marketStore';
 import useSessionStore from './stores/sessionStore';
@@ -106,7 +106,8 @@ export default function App() {
     setPendingBet(null);
 
     try {
-      const result = await api.tradeOpen({
+      const result = await tradeOpen({
+        granterAddress: injAddress,
         marketId: pendingBet.market.marketId,
         side: pendingBet.direction === 'up' ? 'long' : 'short',
         stakeUsdt: pendingBet.stake,
@@ -128,7 +129,7 @@ export default function App() {
       setTxStatus({ type: 'error', message: err.message });
       setTimeout(() => setTxStatus(null), 5000);
     }
-  }, [pendingBet, connected, refreshBalances]);
+  }, [pendingBet, connected, injAddress, refreshBalances]);
 
   const handleCashOut = useCallback(async (position) => {
     if (!connected || !position.market) return;
@@ -136,7 +137,8 @@ export default function App() {
     setTxStatus({ type: 'loading', message: 'Closing position...' });
 
     try {
-      const result = await api.tradeClose({
+      const result = await tradeClose({
+        granterAddress: injAddress,
         marketId: position.marketId,
         side: position.side,
         quantity: position.quantity,
@@ -152,7 +154,7 @@ export default function App() {
       setTxStatus({ type: 'error', message: err.message });
       setTimeout(() => setTxStatus(null), 5000);
     }
-  }, [connected, refreshBalances]);
+  }, [connected, injAddress, refreshBalances]);
 
   // Sequential close — avoids nonce races on the same wallet. One failure
   // doesn't abort the rest; the final toast summarizes successes vs failures.
@@ -166,7 +168,8 @@ export default function App() {
       const pos = list[i];
       setTxStatus({ type: 'loading', message: `Closing ${i + 1}/${list.length}: ${pos.asset}...` });
       try {
-        await api.tradeClose({
+        await tradeClose({
+          granterAddress: injAddress,
           marketId: pos.marketId,
           side: pos.side,
           quantity: pos.quantity,
@@ -186,7 +189,7 @@ export default function App() {
     refreshBalances();
     useMarketStore.getState().fetchPositions(useWalletStore.getState().injAddress);
     setTimeout(() => setTxStatus(null), 5000);
-  }, [connected, refreshBalances]);
+  }, [connected, injAddress, refreshBalances]);
 
   return (
     <>
