@@ -1,7 +1,18 @@
 {
   "name": "inj-bet",
-  "private": true,
   "version": "1.0.0",
+  "private": true,
+  "description": "Perpetual-futures betting UI on Injective with one-click AuthZ-delegated, gas-free trades.",
+  "license": "MIT",
+  "author": "ckhbtc",
+  "homepage": "https://bet.inj.so",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ckhbtc/bet.git"
+  },
+  "bugs": {
+    "url": "https://github.com/ckhbtc/bet/issues"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
