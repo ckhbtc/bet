@@ -1,7 +1,7 @@
 /**
  * Account initialization faucet — sends 0.001 INJ via EVM to fresh
  * Injective wallets so they can pay gas for their first AuthZ grant.
- * Mirrors agentic-trading/src/server/faucet.ts.
+ * Requires FAUCET_PRIVATE_KEY in .env (any mainnet INJ wallet works).
  */
 
 import { ethers } from 'ethers';
