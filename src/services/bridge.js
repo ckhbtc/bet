@@ -3,22 +3,14 @@
  * User signs approve + bridge tx on Arbitrum via MetaMask.
  */
 
+import { formatTokenUnits, parseTokenUnits } from './bridgeAmount';
+
 const DEBRIDGE_API = 'https://dln.debridge.finance/v1.0';
 const ARBITRUM_ID = 42161;
 const INJECTIVE_DLN = 100000029;
 
 export const BRIDGE_SRC_TOKEN = '0xaf88d065e77c8cc2239327c5edb3a432268e5831'; // USDC on Arbitrum
 export const BRIDGE_DST_TOKEN = '0x88f7f2b685f9692caf8c478f5badf09ee9b1cc13'; // USDT on Injective EVM
-
-function toBase(human, decimals = 6) {
-  const f = parseFloat(human);
-  if (!isFinite(f) || f <= 0) throw new Error('Invalid amount');
-  return BigInt(Math.round(f * 10 ** decimals));
-}
-
-function fromBase(base, decimals = 6) {
-  return (Number(base) / 10 ** decimals).toFixed(6).replace(/\.?0+$/, '');
-}
 
 function encodeApprove(spender, amount) {
   const sel = '095ea7b3';
@@ -42,7 +34,7 @@ async function callDln(params) {
 }
 
 export async function fetchBridgeQuote(amount, recipientEvm) {
-  const srcAmountBase = toBase(amount).toString();
+  const srcAmountBase = parseTokenUnits(amount).toString();
   const raw = await callDln({
     srcChainId: String(ARBITRUM_ID),
     srcChainTokenIn: BRIDGE_SRC_TOKEN,
@@ -56,7 +48,7 @@ export async function fetchBridgeQuote(amount, recipientEvm) {
   return {
     srcAmount: amount,
     srcAmountBase,
-    dstAmount: fromBase(est.dstChainTokenOut.amount, est.dstChainTokenOut.decimals),
+    dstAmount: formatTokenUnits(est.dstChainTokenOut.amount, est.dstChainTokenOut.decimals),
     dstAmountBase: est.dstChainTokenOut.amount,
     protocolFee: raw.protocolFee ?? '0',
     fixFeeWei: raw.fixFee ?? '1000000000000000',
@@ -119,7 +111,7 @@ async function sendMM({ from, to, data, value }) {
 }
 
 export async function executeBridge(amount, senderEvm, recipientEvm, onProgress) {
-  const srcAmountBase = toBase(amount).toString();
+  const srcAmountBase = parseTokenUnits(amount).toString();
   const originalChainId = await window.ethereum.request({ method: 'eth_chainId' });
 
   onProgress?.('Fetching bridge calldata...');
@@ -140,7 +132,7 @@ export async function executeBridge(amount, senderEvm, recipientEvm, onProgress)
   const estimation = {
     srcAmount: amount,
     srcAmountBase,
-    dstAmount: fromBase(est.dstChainTokenOut.amount, est.dstChainTokenOut.decimals),
+    dstAmount: formatTokenUnits(est.dstChainTokenOut.amount, est.dstChainTokenOut.decimals),
     dstAmountBase: est.dstChainTokenOut.amount,
     protocolFee: raw.protocolFee ?? '0',
     fixFeeWei: raw.fixFee ?? '1000000000000000',

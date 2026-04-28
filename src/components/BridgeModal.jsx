@@ -1,5 +1,6 @@
 import { useState, useCallback } from 'react';
 import { fetchBridgeQuote, executeBridge } from '../services/bridge';
+import { isPositiveTokenAmount, sanitizeDecimalInput } from '../services/bridgeAmount';
 import useWalletStore from '../stores/walletStore';
 
 export default function BridgeModal({ onClose }) {
@@ -13,7 +14,7 @@ export default function BridgeModal({ onClose }) {
   const [success, setSuccess] = useState(null);
 
   const handleQuote = useCallback(async () => {
-    if (!amount || parseFloat(amount) <= 0) return;
+    if (!isPositiveTokenAmount(amount)) return;
     setError(null); setQuoting(true); setQuote(null);
     try {
       setQuote(await fetchBridgeQuote(amount, ethAddress));
@@ -22,7 +23,7 @@ export default function BridgeModal({ onClose }) {
   }, [amount, ethAddress]);
 
   const handleBridge = useCallback(async () => {
-    if (!amount || parseFloat(amount) <= 0) return;
+    if (!isPositiveTokenAmount(amount)) return;
     setError(null); setBridging(true); setSuccess(null);
     try {
       const result = await executeBridge(amount, ethAddress, ethAddress, setStep);
@@ -100,7 +101,7 @@ export default function BridgeModal({ onClose }) {
                 placeholder="0.00"
                 value={amount}
                 onChange={e => {
-                  const v = e.target.value.replace(/[^0-9.]/g, '');
+                  const v = sanitizeDecimalInput(e.target.value);
                   setAmount(v); setQuote(null); setSuccess(null); setError(null);
                 }}
                 disabled={bridging}
@@ -197,14 +198,14 @@ export default function BridgeModal({ onClose }) {
             {!quote && !success && (
               <button
                 onClick={handleQuote}
-                disabled={quoting || !amount || parseFloat(amount) <= 0}
+                disabled={quoting || !isPositiveTokenAmount(amount)}
                 style={{
                   flex: 1, background: 'var(--accent-grad)',
                   color: 'var(--on-accent)', border: 'none', borderRadius: 10,
                   padding: '14px 0', fontSize: 14, fontWeight: 700,
                   cursor: (quoting || !amount) ? 'not-allowed' : 'pointer',
                   fontFamily: 'var(--font-heading)',
-                  opacity: (!amount || parseFloat(amount) <= 0) ? 0.5 : 1,
+                  opacity: !isPositiveTokenAmount(amount) ? 0.5 : 1,
                 }}
               >{quoting ? 'Getting quote...' : 'Get Quote'}</button>
             )}
