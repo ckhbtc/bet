@@ -120,11 +120,14 @@ export default function App() {
         tpPrice: pendingBet.targetPrice,
       });
 
-      setTxStatus(getOpenTradeStatus(result));
+      const status = getOpenTradeStatus(result);
+      setTxStatus(status);
       setSelectedMarket(null);
       setView('bets');
-      setConfetti(true);
-      setTimeout(() => setConfetti(false), 3500);
+      if (status.type === 'success') {
+        setConfetti(true);
+        setTimeout(() => setConfetti(false), 3500);
+      }
 
       refreshBalances();
       useMarketStore.getState().fetchPositions(useWalletStore.getState().injAddress);
