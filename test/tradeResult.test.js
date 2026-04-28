@@ -28,6 +28,19 @@ test('getOpenTradeStatus returns warning when open succeeds but take-profit fail
   );
 });
 
+test('getOpenTradeStatus returns success when no take-profit was requested', () => {
+  assert.deepEqual(
+    getOpenTradeStatus({
+      txHash: 'ABCDEF1234567890',
+      takeProfit: { requested: false, placed: false, error: null },
+    }),
+    {
+      type: 'success',
+      message: 'Trade placed! Tx: ABCDEF123456...',
+    }
+  );
+});
+
 test('shortenError caps long exchange errors', () => {
   const shortened = shortenError('x'.repeat(200), 20);
   assert.equal(shortened.length, 20);
