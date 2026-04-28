@@ -18,6 +18,7 @@
     "dev": "vite",
     "dev:api": "node dev-server.js",
     "build": "vite build",
+    "test": "node --test",
     "preview": "vite preview",
     "start": "node server.js"
   },
