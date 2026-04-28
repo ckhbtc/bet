@@ -22,31 +22,12 @@ import {
 import { getNetworkEndpoints, Network } from '@injectivelabs/networks';
 import Decimal from 'decimal.js';
 import { getGrantee } from './grantee';
+import { toChainPrice, toChainQty, toChainMargin } from './tradeMath';
 
 const NETWORK = Network.MainnetSentry;
 const endpoints = getNetworkEndpoints(NETWORK);
 const oracleApi = new IndexerGrpcOracleApi(endpoints.indexer);
 const derivativesApi = new IndexerGrpcDerivativesApi(endpoints.indexer);
-
-const QUOTE_SCALE = new Decimal(10).pow(6);
-
-// ─── Quantization helpers ──────────────────────────────────────────────────
-
-function toChainPrice(humanPrice, minPriceTickSize) {
-  const chainPrice = humanPrice.mul(QUOTE_SCALE);
-  const tick = new Decimal(minPriceTickSize);
-  return chainPrice.div(tick).floor().mul(tick).toFixed(0, Decimal.ROUND_DOWN);
-}
-
-function toChainQty(humanQty, minQuantityTickSize) {
-  const tick = new Decimal(minQuantityTickSize);
-  const quantized = humanQty.div(tick).floor().mul(tick);
-  return quantized.toFixed(18).replace(/\.?0+$/, '') || '0';
-}
-
-function toChainMargin(humanMargin) {
-  return humanMargin.mul(QUOTE_SCALE).toFixed(0, Decimal.ROUND_DOWN);
-}
 
 // ─── Markets cache ─────────────────────────────────────────────────────────
 
@@ -165,6 +146,9 @@ export async function tradeOpen({
   });
 
   const openResult = await broadcastViaAuthz([openMsg], session);
+  let takeProfit = tpPrice && Number(tpPrice) > 0
+    ? { requested: true, placed: false, error: null }
+    : { requested: false, placed: false, error: null };
 
   // Reduce-only TP placed in a second tx — bundling with open fails because the
   // chain validates the reduce-only against pre-tx state where no position exists.
@@ -182,12 +166,18 @@ export async function tradeOpen({
         feeRecipient: session.granterAddress,
       });
       await broadcastViaAuthz([tpMsg], session);
+      takeProfit = { requested: true, placed: true, error: null };
     } catch (err) {
       console.warn('TP placement failed (open succeeded):', err.message);
+      takeProfit = {
+        requested: true,
+        placed: false,
+        error: err.message || 'Take-profit placement failed',
+      };
     }
   }
 
-  return openResult;
+  return { ...openResult, takeProfit };
 }
 
 // ─── Close position (market order) ─────────────────────────────────────────

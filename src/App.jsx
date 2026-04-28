@@ -17,6 +17,7 @@ import BridgeModal from './components/BridgeModal';
 import Confetti from './components/Confetti';
 import { AGGRESSIVENESS } from './data/mockData';
 import { tradeOpen, tradeClose } from './services/trade';
+import { getOpenTradeStatus } from './services/tradeResult';
 import useWalletStore from './stores/walletStore';
 import useMarketStore from './stores/marketStore';
 import useSessionStore from './stores/sessionStore';
@@ -119,7 +120,7 @@ export default function App() {
         tpPrice: pendingBet.targetPrice,
       });
 
-      setTxStatus({ type: 'success', message: `Trade placed! Tx: ${result.txHash.slice(0, 12)}...` });
+      setTxStatus(getOpenTradeStatus(result));
       setSelectedMarket(null);
       setView('bets');
       setConfetti(true);
@@ -237,18 +238,21 @@ export default function App() {
           zIndex: 300, padding: '12px 24px', borderRadius: 10,
           background: txStatus.type === 'loading' ? 'var(--bg-card)'
             : txStatus.type === 'success' ? 'var(--green-dim)'
+            : txStatus.type === 'warning' ? 'var(--accent-dim)'
             : 'var(--red-dim)',
           border: `1px solid ${txStatus.type === 'loading' ? 'var(--border)'
             : txStatus.type === 'success' ? 'var(--green)'
+            : txStatus.type === 'warning' ? 'var(--accent)'
             : 'var(--red)'}`,
           color: txStatus.type === 'loading' ? 'var(--text-primary)'
             : txStatus.type === 'success' ? 'var(--green)'
+            : txStatus.type === 'warning' ? 'var(--accent)'
             : 'var(--red)',
           fontSize: 13, fontWeight: 500, fontFamily: 'var(--font-heading)',
           animation: 'slide-up 0.3s ease',
           maxWidth: 400,
         }}>
-          {txStatus.type === 'loading' && '⏳ '}{txStatus.message}
+          {txStatus.type === 'loading' && '⏳ '}{txStatus.type === 'warning' && '! '}{txStatus.message}
         </div>
       )}
 
