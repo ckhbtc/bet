@@ -18,8 +18,10 @@ the position.
 - **Client-side custody.** The grantee key never leaves the browser. Trades
   are signed and broadcast in-browser via `MsgAuthzExec`. No server holds
   user secrets.
-- **Indefinite grants.** AuthZ expires year 2099. Revoke by clearing
-  localStorage, disconnecting MetaMask, or signing `MsgRevoke` on-chain.
+- **Revocable grants.** AuthZ expires year 2099 by default, and the app exposes
+  an on-chain Revoke autosign action that signs `MsgRevoke` for every delegated
+  trading message type. Clearing localStorage or disconnecting only removes the
+  local session key; it does not revoke the on-chain grant.
 
 ## Tech
 
@@ -62,8 +64,10 @@ in `localStorage` (keyed by granter `inj1` so multi-wallet users don't cross
 streams). For every subsequent bet, the browser wraps the trade message in
 `MsgAuthzExec`, signs it with the local grantee key, and broadcasts via
 `MsgBroadcasterWithPk.broadcastWithFeeDelegation` — no popup, no gas, no
-server roundtrip. The Express server only exists to faucet brand-new wallets;
-trade endpoints don't exist.
+server roundtrip. When the user chooses Revoke autosign, the browser signs
+`MsgRevoke` from the granter wallet for each delegated trading message type and
+then clears the local grantee key. The Express server only exists to faucet
+brand-new wallets; trade endpoints don't exist.
 
 For the long version see [`~/.claude/skills/injective-autosign/SKILL.md`](https://github.com/ckhbtc/bet#readme)
 in the dev's local skills (architecture choices: client custody vs server
@@ -79,7 +83,8 @@ src/
 ├── services/
 │   ├── grantee.js           # localStorage helpers — keyed by granter inj1
 │   ├── trade.js             # client-side tradeOpen/tradeClose, MsgAuthzExec broadcast
-│   ├── autosign.js          # grantAuthZ — generates ephemeral key, signs MsgGrant
+│   ├── autosign.js          # grantAuthZ/revokeAuthZ — signs MsgGrant/MsgRevoke
+│   ├── authzMessages.js     # shared AuthZ grant/revoke message builders
 │   ├── injective.js         # read APIs (markets, prices, balances, positions)
 │   ├── api.js               # only initAccount (faucet) hits the server
 │   ├── bridge.js            # deBridge inbound from Arbitrum USDC → Injective USDT

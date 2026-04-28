@@ -73,6 +73,10 @@ export default function App() {
   const { markets, positions, loading, startPolling, stopPolling } = useMarketStore();
   const session = useSessionStore();
 
+  const clearTxStatusSoon = useCallback(() => {
+    setTimeout(() => setTxStatus(null), 5000);
+  }, []);
+
   // Re-validate the session token against the currently-connected wallet.
   // Prevents a stale sessionToken (bound to a prior granter) from being
   // treated as active after the user swaps MetaMask accounts.
@@ -124,12 +128,12 @@ export default function App() {
       refreshBalances();
       useMarketStore.getState().fetchPositions(useWalletStore.getState().injAddress);
 
-      setTimeout(() => setTxStatus(null), 5000);
+      clearTxStatusSoon();
     } catch (err) {
       setTxStatus({ type: 'error', message: err.message });
-      setTimeout(() => setTxStatus(null), 5000);
+      clearTxStatusSoon();
     }
-  }, [pendingBet, connected, injAddress, refreshBalances]);
+  }, [pendingBet, connected, injAddress, refreshBalances, clearTxStatusSoon]);
 
   const handleCashOut = useCallback(async (position) => {
     if (!connected || !position.market) return;
@@ -149,12 +153,12 @@ export default function App() {
       refreshBalances();
       useMarketStore.getState().fetchPositions(useWalletStore.getState().injAddress);
 
-      setTimeout(() => setTxStatus(null), 5000);
+      clearTxStatusSoon();
     } catch (err) {
       setTxStatus({ type: 'error', message: err.message });
-      setTimeout(() => setTxStatus(null), 5000);
+      clearTxStatusSoon();
     }
-  }, [connected, injAddress, refreshBalances]);
+  }, [connected, injAddress, refreshBalances, clearTxStatusSoon]);
 
   // Sequential close — avoids nonce races on the same wallet. One failure
   // doesn't abort the rest; the final toast summarizes successes vs failures.
@@ -188,12 +192,41 @@ export default function App() {
     });
     refreshBalances();
     useMarketStore.getState().fetchPositions(useWalletStore.getState().injAddress);
-    setTimeout(() => setTxStatus(null), 5000);
-  }, [connected, injAddress, refreshBalances]);
+    clearTxStatusSoon();
+  }, [connected, injAddress, refreshBalances, clearTxStatusSoon]);
+
+  const handleRevokeAutosign = useCallback(async () => {
+    if (!connected || !injAddress || session.revoking) return;
+
+    setTxStatus({ type: 'loading', message: 'Revoking autosign...' });
+    try {
+      const result = await session.revoke(injAddress);
+      setTxStatus({
+        type: 'success',
+        message: result.txHash
+          ? `Autosign revoked. Tx: ${result.txHash.slice(0, 12)}...`
+          : 'Autosign cleared.',
+      });
+      clearTxStatusSoon();
+    } catch (err) {
+      setTxStatus({ type: 'error', message: err.message });
+      clearTxStatusSoon();
+    }
+  }, [connected, injAddress, session, clearTxStatusSoon]);
 
   return (
     <>
-      <TopBar onNavigate={setView} currentView={view} theme={theme} onSetTheme={setThemeTo} onAddFunds={() => setShowBridge(true)} devMode={devMode} />
+      <TopBar
+        onNavigate={setView}
+        currentView={view}
+        theme={theme}
+        onSetTheme={setThemeTo}
+        onAddFunds={() => setShowBridge(true)}
+        onRevokeAutosign={handleRevokeAutosign}
+        sessionActive={session.active}
+        revokingAutosign={session.revoking}
+        devMode={devMode}
+      />
 
       {/* Transaction status toast */}
       {confetti && <Confetti />}

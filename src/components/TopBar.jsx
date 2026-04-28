@@ -6,7 +6,17 @@ const THEME_SEGS = [
   { id: 'light',   glyph: '☀', label: 'Light' },
 ];
 
-export default function TopBar({ onNavigate, currentView, theme, onSetTheme, onAddFunds, devMode }) {
+export default function TopBar({
+  onNavigate,
+  currentView,
+  theme,
+  onSetTheme,
+  onAddFunds,
+  onRevokeAutosign,
+  sessionActive,
+  revokingAutosign,
+  devMode,
+}) {
   const { connected, connecting, ethAddress, injAddress, usdtBalance, connect, disconnect, error } = useWalletStore();
 
   return (
@@ -108,6 +118,23 @@ export default function TopBar({ onNavigate, currentView, theme, onSetTheme, onA
                 display: 'inline-flex', alignItems: 'center', gap: 4,
               }}
             >+ Add funds</button>
+            {sessionActive && (
+              <button
+                onClick={onRevokeAutosign}
+                disabled={revokingAutosign}
+                style={{
+                  background: 'var(--red-dim)',
+                  border: '1px solid var(--red)',
+                  borderRadius: 8,
+                  padding: '6px 12px',
+                  color: 'var(--red)',
+                  fontSize: 12, fontWeight: 600,
+                  fontFamily: 'var(--font-heading)',
+                  cursor: revokingAutosign ? 'wait' : 'pointer',
+                  opacity: revokingAutosign ? 0.65 : 1,
+                }}
+              >{revokingAutosign ? 'Revoking...' : 'Revoke autosign'}</button>
+            )}
             <div style={{
               background: 'var(--bg-card)',
               border: '1px solid var(--border)',

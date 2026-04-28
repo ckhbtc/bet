@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { grantAuthZ } from '../services/autosign';
+import { grantAuthZ, revokeAuthZ } from '../services/autosign';
 import { getGrantee, setGrantee, clearGrantee } from '../services/grantee';
 import { api } from '../services/api';
 
@@ -14,6 +14,7 @@ const useSessionStore = create((set) => ({
   expiration: null,
   granterAddress: null,
   granting: false,
+  revoking: false,
   status: '',
   error: null,
 
@@ -78,9 +79,43 @@ const useSessionStore = create((set) => ({
     }
   },
 
+  revoke: async (granterAddress) => {
+    if (!granterAddress) {
+      set({ active: false, expiration: null, granterAddress: null, revoking: false, status: '' });
+      return { txHash: null, localOnly: true };
+    }
+
+    const entry = getGrantee(granterAddress);
+    if (!entry) {
+      set({ active: false, expiration: null, granterAddress: null, revoking: false, status: '' });
+      return { txHash: null, localOnly: true };
+    }
+
+    set({ revoking: true, error: null, status: '' });
+    try {
+      const result = await revokeAuthZ({
+        injAddress: granterAddress,
+        granteeAddress: entry.granteeAddress,
+      }, (msg) => set({ status: msg }));
+
+      clearGrantee(granterAddress);
+      set({
+        active: false,
+        expiration: null,
+        granterAddress: null,
+        revoking: false,
+        status: 'Autosign revoked.',
+      });
+      return result;
+    } catch (err) {
+      set({ revoking: false, error: err.message, status: '' });
+      throw err;
+    }
+  },
+
   deactivate: (granterAddress) => {
     if (granterAddress) clearGrantee(granterAddress);
-    set({ active: false, expiration: null, granterAddress: null, status: '' });
+    set({ active: false, expiration: null, granterAddress: null, revoking: false, status: '' });
   },
 }));
 

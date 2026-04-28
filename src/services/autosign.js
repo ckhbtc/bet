@@ -1,15 +1,14 @@
 /**
- * Browser AuthZ grant flow.
- * Generates an ephemeral key, signs MsgGrant via MetaMask EIP-712, sends
- * the ephemeral private key to the server for session-based trading.
+ * Browser AuthZ grant/revoke flow.
+ * Generates an ephemeral key, signs MsgGrant via MetaMask EIP-712, and stores
+ * the key locally for session-based trading. Revoke signs MsgRevoke on-chain
+ * before local session state is cleared.
  *
  * Adapted from agentic-trading/src/client/lib/autosign.ts.
  */
 
 import {
   PrivateKey,
-  MsgGrant,
-  getGenericAuthorizationFromMessageType,
   getEip712TypedData,
   createTxRawEIP712,
   createWeb3Extension,
@@ -20,6 +19,7 @@ import {
 } from '@injectivelabs/sdk-ts';
 import { getNetworkEndpoints, getNetworkChainInfo, Network } from '@injectivelabs/networks';
 import { ethers } from 'ethers';
+import { buildGrantMessages, buildRevokeMessages, GRANT_EXPIRATION_S } from './authzMessages';
 
 const NETWORK = Network.MainnetSentry;
 const endpoints = getNetworkEndpoints(NETWORK);
@@ -27,19 +27,6 @@ const chainInfo = getNetworkChainInfo(NETWORK);
 
 const authApi = new ChainRestAuthApi(endpoints.rest);
 const txApi = new TxGrpcApi(endpoints.grpc);
-
-const GRANT_MSG_TYPES = [
-  '/injective.exchange.v1beta1.MsgCreateDerivativeMarketOrder',
-  '/injective.exchange.v1beta1.MsgCreateDerivativeLimitOrder',
-  '/injective.exchange.v1beta1.MsgCancelDerivativeOrder',
-  '/injective.exchange.v1beta1.MsgBatchUpdateOrders',
-  '/injective.exchange.v1beta1.MsgIncreasePositionMargin',
-];
-
-// "Indefinite" grant — far enough future that no real user will hit it.
-// Year 2099 in seconds-since-epoch. The grant lives until the user clears
-// localStorage, disconnects, or signs a MsgRevoke on-chain.
-const GRANT_EXPIRATION_S = 4_070_908_800; // 2099-01-01T00:00:00Z
 
 function hexToBytes(hex) {
   const bytes = new Uint8Array(hex.length / 2);
@@ -63,14 +50,7 @@ async function recoverPubKeyFromWallet(ethAddress) {
   return btoa(String.fromCharCode(...bytes));
 }
 
-export async function grantAuthZ(injAddress, onProgress) {
-  onProgress?.('Generating ephemeral signing key...');
-
-  const { privateKey: privKey } = PrivateKey.generate();
-  const ephemeralAddress = privKey.toBech32();
-
-  onProgress?.('Confirm the AuthZ grant in your wallet (one-time)...');
-
+async function fetchTxContext(injAddress) {
   const [acct, blockRes] = await Promise.all([
     authApi.fetchAccount(injAddress),
     fetch(`${endpoints.rest}/cosmos/base/tendermint/v1beta1/blocks/latest?_=${Date.now()}`, { cache: 'no-store' }).then(r => r.json()),
@@ -82,6 +62,10 @@ export async function grantAuthZ(injAddress, onProgress) {
   const latestHeight = parseInt(blockRes.block?.header?.height ?? '0', 10);
   const timeoutHeight = latestHeight + 200;
 
+  return { accountNumber, sequence, pubKey, timeoutHeight };
+}
+
+async function ensureInjectiveNetwork(onProgress) {
   if (!window.ethereum) throw new Error('No wallet detected');
 
   const currentChain = await window.ethereum.request({ method: 'eth_chainId' });
@@ -113,31 +97,26 @@ export async function grantAuthZ(injAddress, onProgress) {
       throw new Error('Please switch to Injective (chain ID 1776) in your wallet');
     }
   }
+}
+
+async function signAndBroadcastEip712({ injAddress, msgs, memo, onProgress, failureLabel }) {
+  const { accountNumber, sequence, pubKey, timeoutHeight } = await fetchTxContext(injAddress);
+
+  await ensureInjectiveNetwork(onProgress);
 
   // evmChainId must come from MetaMask at sign-time, not be hardcoded.
   const evmChainId = parseInt(
     await window.ethereum.request({ method: 'eth_chainId' }), 16
   );
 
-  const expiration = GRANT_EXPIRATION_S;
-
-  const msgGrants = GRANT_MSG_TYPES.map(msgType =>
-    MsgGrant.fromJSON({
-      grantee: ephemeralAddress,
-      granter: injAddress,
-      authorization: getGenericAuthorizationFromMessageType(msgType),
-      expiration,
-    })
-  );
-
   const typedData = getEip712TypedData({
-    msgs: msgGrants,
+    msgs,
     tx: {
       accountNumber: accountNumber.toString(),
       sequence: sequence.toString(),
       timeoutHeight: timeoutHeight.toString(),
       chainId: chainInfo.chainId,
-      memo: 'Enable Bet autosign',
+      memo,
     },
     evmChainId,
   });
@@ -151,6 +130,7 @@ export async function grantAuthZ(injAddress, onProgress) {
     resolvedPubKey = await recoverPubKeyFromWallet(from);
   }
 
+  onProgress?.('Confirm in your wallet...');
   const sig = await window.ethereum.request({
     method: 'eth_signTypedData_v4',
     params: [from, JSON.stringify(typedData)],
@@ -158,8 +138,8 @@ export async function grantAuthZ(injAddress, onProgress) {
   const sigBytes = hexToBytes(sig.replace('0x', ''));
 
   const { txRaw } = createTransaction({
-    message: msgGrants,
-    memo: 'Enable Bet autosign',
+    message: msgs,
+    memo,
     pubKey: resolvedPubKey,
     sequence,
     accountNumber,
@@ -172,11 +152,35 @@ export async function grantAuthZ(injAddress, onProgress) {
   const txRawEip712 = createTxRawEIP712(txRaw, web3Extension);
   txRawEip712.signatures = [sigBytes];
 
-  onProgress?.('Broadcasting AuthZ grant...');
+  onProgress?.('Broadcasting transaction...');
   const response = await txApi.broadcast(txRawEip712);
   if (response.code !== 0) {
-    throw new Error(`AuthZ grant failed (code ${response.code}): ${response.rawLog}`);
+    throw new Error(`${failureLabel} failed (code ${response.code}): ${response.rawLog}`);
   }
+
+  return { txHash: response.txHash, evmChainId };
+}
+
+export async function grantAuthZ(injAddress, onProgress) {
+  onProgress?.('Generating ephemeral signing key...');
+
+  const { privateKey: privKey } = PrivateKey.generate();
+  const ephemeralAddress = privKey.toBech32();
+  const expiration = GRANT_EXPIRATION_S;
+  const msgGrants = buildGrantMessages({
+    granter: injAddress,
+    grantee: ephemeralAddress,
+    expiration,
+  });
+
+  onProgress?.('Preparing AuthZ grant...');
+  const { txHash, evmChainId } = await signAndBroadcastEip712({
+    injAddress,
+    msgs: msgGrants,
+    memo: 'Enable Bet autosign',
+    onProgress,
+    failureLabel: 'AuthZ grant',
+  });
 
   onProgress?.('Authorization granted.');
 
@@ -185,5 +189,27 @@ export async function grantAuthZ(injAddress, onProgress) {
     injectiveAddress: ephemeralAddress,
     expiration,
     evmChainId,
+    txHash,
   };
+}
+
+export async function revokeAuthZ({ injAddress, granteeAddress }, onProgress) {
+  if (!granteeAddress) throw new Error('No autosign grantee found to revoke');
+
+  onProgress?.('Preparing AuthZ revoke...');
+  const msgRevokes = buildRevokeMessages({
+    granter: injAddress,
+    grantee: granteeAddress,
+  });
+
+  const { txHash, evmChainId } = await signAndBroadcastEip712({
+    injAddress,
+    msgs: msgRevokes,
+    memo: 'Revoke Bet autosign',
+    onProgress,
+    failureLabel: 'AuthZ revoke',
+  });
+
+  onProgress?.('Authorization revoked.');
+  return { txHash, evmChainId, granteeAddress };
 }

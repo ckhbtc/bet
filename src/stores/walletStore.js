@@ -7,7 +7,7 @@ import { clearGrantee } from '../services/grantee';
 function clearSession(granterAddress) {
   if (granterAddress) clearGrantee(granterAddress);
   import('./sessionStore').then(m => m.default.setState({
-    active: false, expiration: null, granterAddress: null, status: '', error: null,
+    active: false, expiration: null, granterAddress: null, revoking: false, status: '', error: null,
   })).catch(() => {});
 }
 
