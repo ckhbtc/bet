@@ -92,25 +92,29 @@ const useSessionStore = create((set) => ({
     }
 
     set({ revoking: true, error: null, status: '' });
+    let result;
     try {
-      const result = await revokeAuthZ({
+      result = await revokeAuthZ({
         injAddress: granterAddress,
         granteeAddress: entry.granteeAddress,
       }, (msg) => set({ status: msg }));
-
-      clearGrantee(granterAddress);
-      set({
-        active: false,
-        expiration: null,
-        granterAddress: null,
-        revoking: false,
-        status: 'Autosign revoked.',
-      });
-      return result;
     } catch (err) {
       set({ revoking: false, error: err.message, status: '' });
       throw err;
     }
+
+    // On-chain revoke succeeded — local state must reflect that even if
+    // localStorage hiccups, otherwise the UI keeps trying to sign with a
+    // grantee key the chain no longer accepts.
+    try { clearGrantee(granterAddress); } catch { /* best-effort */ }
+    set({
+      active: false,
+      expiration: null,
+      granterAddress: null,
+      revoking: false,
+      status: 'Autosign revoked.',
+    });
+    return result;
   },
 
   deactivate: (granterAddress) => {
