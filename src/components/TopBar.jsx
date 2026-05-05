@@ -1,9 +1,8 @@
 import useWalletStore from '../stores/walletStore';
 
 const THEME_SEGS = [
-  { id: 'bauhaus', glyph: '◐', label: 'Bauhaus' },
-  { id: 'dark',    glyph: '☾', label: 'Dark' },
-  { id: 'light',   glyph: '☀', label: 'Light' },
+  { id: 'bauhaus',      glyph: '☀', label: 'Bauhaus light' },
+  { id: 'bauhaus-dark', glyph: '☾', label: 'Bauhaus dark' },
 ];
 
 export default function TopBar({

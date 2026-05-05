@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 
-const THEMES = ['bauhaus', 'dark', 'light'];
+const THEMES = ['bauhaus', 'bauhaus-dark'];
 const readInitialTheme = () => {
   if (typeof document === 'undefined') return 'bauhaus';
   const attr = document.documentElement.dataset.theme;

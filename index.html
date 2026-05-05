@@ -11,20 +11,25 @@
     <script>
       // Set theme BEFORE first paint to avoid FOUC.
       // Order: localStorage > 'bauhaus' default.
+      // Migrate legacy values: old 'dark' (Atrium) → 'bauhaus-dark'; 'light' (Hearth) → 'bauhaus'.
       (function () {
         try {
           var saved = localStorage.getItem('bet-theme');
-          var t = (saved === 'light' || saved === 'dark' || saved === 'bauhaus') ? saved : 'bauhaus';
+          if (saved === 'dark') saved = 'bauhaus-dark';
+          if (saved === 'light') saved = 'bauhaus';
+          var t = (saved === 'bauhaus' || saved === 'bauhaus-dark') ? saved : 'bauhaus';
           document.documentElement.dataset.theme = t;
+          if (t !== localStorage.getItem('bet-theme')) {
+            localStorage.setItem('bet-theme', t);
+          }
         } catch (e) {
           document.documentElement.dataset.theme = 'bauhaus';
         }
       })();
     </script>
     <style>
-      html { background: #f7f3ec; color: #1f1a13; }
-      html[data-theme="dark"] { background: #07090e; color: #e8ecf6; }
-      html[data-theme="bauhaus"] { background: #f0e9d6; color: #1a1612; }
+      html { background: #f0e9d6; color: #1a1612; }
+      html[data-theme="bauhaus-dark"] { background: #14110b; color: #f0e9d6; }
     </style>
   </head>
   <body>
