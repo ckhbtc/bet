@@ -5,73 +5,15 @@
 }
 
 /*
- * Two themes share the same component CSS — only the variables flip:
- * - LIGHT (default) = Hearth: warm cream paper, terracotta accent
- * - DARK            = Atrium: navy void, cyan→blue gradient accent
+ * Two themes — both Bauhaus, just light vs dark paper.
+ * - LIGHT (default) [data-theme="bauhaus"]      — cream paper, ink text, red+yellow accents
+ * - DARK            [data-theme="bauhaus-dark"] — warm ink paper, cream text, same accents
  *
- * Toggle by setting data-theme="light" | "dark" on <html>.
- * The init script in index.html sets it BEFORE first paint to avoid FOUC.
+ * Toggle by setting data-theme on <html>. The init script in index.html
+ * sets it BEFORE first paint to avoid FOUC.
  */
 
-/* Light theme (Hearth) — defaults */
-:root {
-  --bg-primary:    #f7f3ec;
-  --bg-secondary:  #f1ece2;
-  --bg-card:       #f7f3ec;
-  --bg-card-hover: #ece5d4;
-  --border:        rgba(31, 26, 19, 0.08);
-  --border-light:  rgba(31, 26, 19, 0.15);
-  --text-primary:   #1f1a13;
-  --text-secondary: #6b6256;
-  --text-muted:     #a59c8e;
-  --accent:        #c0532b;
-  --accent-light:  #d0633b;
-  --accent-dim:    rgba(192, 83, 43, 0.12);
-  --accent-grad:   #c0532b;
-  --on-accent:     #ffffff;
-  --green:         #4a7a3a;
-  --green-dim:     rgba(74, 122, 58, 0.12);
-  --red:           #b53a28;
-  --red-dim:       rgba(181, 58, 40, 0.12);
-  --blue:          #3b6a8c;
-  --blue-grad:     #3b6a8c;
-  --overlay:       rgba(31, 26, 19, 0.45);
-  --font-heading:  'Funnel Display', 'Inter', sans-serif;
-  --font-body:     'Onest', 'Inter', -apple-system, sans-serif;
-  --font-mono:     'JetBrains Mono', 'SF Mono', monospace;
-}
-
-/* Dark theme (Atrium) — cyan→blue gradient on navy void */
-[data-theme="dark"] {
-  --bg-primary:    #07090e;
-  --bg-secondary:  #0c1018;
-  --bg-card:       #141a28;
-  --bg-card-hover: #1c2438;
-  --border:        rgba(120, 165, 220, 0.10);
-  --border-light:  rgba(120, 165, 220, 0.22);
-  --text-primary:   #e8ecf6;
-  --text-secondary: #aab4c8;
-  --text-muted:     #6b7488;
-  --accent:        #00d4ff;
-  --accent-light:  #3d7bff;
-  --accent-dim:    rgba(0, 212, 255, 0.12);
-  --accent-grad:   linear-gradient(135deg, #00d4ff 0%, #3d7bff 100%);
-  --on-accent:     #07090e;
-  --green:         #34d399;
-  --green-dim:     rgba(52, 211, 153, 0.15);
-  --red:           #f87171;
-  --red-dim:       rgba(248, 113, 113, 0.15);
-  --blue:          #60a5fa;
-  --blue-grad:     linear-gradient(135deg, #60a5fa, #818cf8);
-  --overlay:       rgba(0, 0, 0, 0.7);
-}
-
-/*
- * Bauhaus theme — constructivist poster palette.
- * Maps to the same CSS variable surface but with primary red/blue/yellow on
- * cream paper. Component-level overrides below flatten radii, thicken
- * borders to 3px, and swap the heading font to Archivo Black.
- */
+:root,
 [data-theme="bauhaus"] {
   --bg-primary:    #f0e9d6;
   --bg-secondary:  #e8e0c8;
@@ -96,6 +38,39 @@
   --overlay:       rgba(26, 22, 18, 0.55);
   --font-heading:  'Archivo Black', 'Funnel Display', sans-serif;
   --font-body:     'Familjen Grotesk', 'Onest', sans-serif;
+  --font-mono:     'JetBrains Mono', 'SF Mono', monospace;
+  /* h1 poster stamp — flipped per theme */
+  --stamp-bg:      #1a1612;
+  --stamp-fg:      #f5c842;
+  --focus-ring:    #1a1612;
+}
+
+[data-theme="bauhaus-dark"] {
+  --bg-primary:    #14110b;
+  --bg-secondary:  #1c1812;
+  --bg-card:       #221d16;
+  --bg-card-hover: #2c261d;
+  --border:        #f0e9d6;
+  --border-light:  #f0e9d6;
+  --text-primary:   #f0e9d6;
+  --text-secondary: #cfc7b3;
+  --text-muted:     #8a8273;
+  --accent:        #ef5a45;
+  --accent-light:  #f5c842;
+  --accent-dim:    #f5c842;
+  --accent-grad:   #ef5a45;
+  --on-accent:     #14110b;
+  --green:         #6ec46e;
+  --green-dim:     rgba(110, 196, 110, 0.20);
+  --red:           #ef5a45;
+  --red-dim:       rgba(239, 90, 69, 0.22);
+  --blue:          #6e9ad8;
+  --blue-grad:     #6e9ad8;
+  --overlay:       rgba(0, 0, 0, 0.72);
+  /* h1 poster stamp inverted — yellow paper with ink text */
+  --stamp-bg:      #f5c842;
+  --stamp-fg:      #14110b;
+  --focus-ring:    #f0e9d6;
 }
 
 html, body {
@@ -170,12 +145,12 @@ input[type="number"] {
   100% { transform: translateY(0); opacity: 1; }
 }
 
-/* ─── Theme toggle (3-segment pill: light / dark / bauhaus) ──────────────── */
+/* ─── Theme toggle (2-segment pill: bauhaus light / bauhaus dark) ────────── */
 
 .theme-toggle {
   background: var(--bg-card);
   border: 1px solid var(--border-light);
-  border-radius: 999px;
+  border-radius: 999px !important;
   height: 28px;
   display: inline-flex;
   align-items: center;
@@ -206,33 +181,29 @@ input[type="number"] {
 }
 .theme-toggle .seg:hover { color: var(--text-primary); }
 .theme-toggle .seg.on {
-  background: var(--text-primary);
-  color: var(--bg-primary);
-}
-[data-theme="dark"] .theme-toggle .seg.on {
-  background: var(--accent-grad);
-  color: var(--on-accent);
-  box-shadow: 0 0 10px rgba(0, 212, 255, 0.35);
-}
-[data-theme="bauhaus"] .theme-toggle .seg.on {
   background: var(--accent);
   color: var(--on-accent);
 }
 
-/* ─── Bauhaus theme — structural overrides ─────────────────────────────────
+/* ─── Bauhaus structural rules — applied to both light and dark ────────────
  * The components use CSS variables for color, so palette flips automatically.
  * These rules flatten radii, thicken borders, and convert the rounded SaaS
  * vibe into a constructivist poster vibe. Inline styles in components force
  * !important on the geometry rules.
  */
-[data-theme="bauhaus"] body {
+[data-theme="bauhaus"] body,
+[data-theme="bauhaus-dark"] body {
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 300 300' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.06'/%3E%3C/svg%3E");
 }
 
 [data-theme="bauhaus"] h1,
 [data-theme="bauhaus"] h2,
 [data-theme="bauhaus"] h3,
-[data-theme="bauhaus"] h4 {
+[data-theme="bauhaus"] h4,
+[data-theme="bauhaus-dark"] h1,
+[data-theme="bauhaus-dark"] h2,
+[data-theme="bauhaus-dark"] h3,
+[data-theme="bauhaus-dark"] h4 {
   font-family: 'Archivo Black', sans-serif;
   text-transform: uppercase;
   letter-spacing: -0.01em;
@@ -244,22 +215,29 @@ input[type="number"] {
  * battles, so target the inline-styled containers via attribute selectors.
  * Preserve true circles (50% radius) — logos/avatars/decorations stay round. */
 [data-theme="bauhaus"] [style*="border-radius"]:not([style*="50%"]),
-[data-theme="bauhaus"] [style*="borderRadius"]:not([style*="50%"]) {
+[data-theme="bauhaus"] [style*="borderRadius"]:not([style*="50%"]),
+[data-theme="bauhaus-dark"] [style*="border-radius"]:not([style*="50%"]),
+[data-theme="bauhaus-dark"] [style*="borderRadius"]:not([style*="50%"]) {
   border-radius: 0 !important;
 }
 [data-theme="bauhaus"] [style*="border: 1px"],
-[data-theme="bauhaus"] [style*="border:1px"] {
+[data-theme="bauhaus"] [style*="border:1px"],
+[data-theme="bauhaus-dark"] [style*="border: 1px"],
+[data-theme="bauhaus-dark"] [style*="border:1px"] {
   border-width: 2px !important;
 }
 [data-theme="bauhaus"] [style*="border: 2px"],
-[data-theme="bauhaus"] [style*="border:2px"] {
+[data-theme="bauhaus"] [style*="border:2px"],
+[data-theme="bauhaus-dark"] [style*="border: 2px"],
+[data-theme="bauhaus-dark"] [style*="border:2px"] {
   border-width: 3px !important;
 }
 
-/* Section headlines: pop them with the ink/yellow poster look. */
-[data-theme="bauhaus"] h1 {
-  background: #1a1612;
-  color: #f5c842;
+/* Section headlines: poster stamp — colors flip via --stamp-bg / --stamp-fg. */
+[data-theme="bauhaus"] h1,
+[data-theme="bauhaus-dark"] h1 {
+  background: var(--stamp-bg);
+  color: var(--stamp-fg);
   display: inline-block;
   padding: 0.2em 0.5em 0.25em;
   margin-bottom: 0.4em !important;
@@ -267,19 +245,20 @@ input[type="number"] {
   letter-spacing: 0 !important;
 }
 
-/* Pill toggle keeps its rounded shape and 1px hairline (it's a control, not a
- * panel). Matches the light/dark proportions so the active seg fills flush. */
-[data-theme="bauhaus"] .theme-toggle {
+/* Pill toggle keeps its rounded shape — it's a control, not a panel. */
+[data-theme="bauhaus"] .theme-toggle,
+[data-theme="bauhaus-dark"] .theme-toggle {
   border-radius: 999px !important;
-  background: #faf6e8 !important;
 }
 
 /* Decorative geometric stamp on every card-shaped element. */
-[data-theme="bauhaus"] .bauhaus-deco {
+[data-theme="bauhaus"] .bauhaus-deco,
+[data-theme="bauhaus-dark"] .bauhaus-deco {
   position: relative;
   overflow: hidden;
 }
-[data-theme="bauhaus"] .bauhaus-deco::after {
+[data-theme="bauhaus"] .bauhaus-deco::after,
+[data-theme="bauhaus-dark"] .bauhaus-deco::after {
   content: '';
   position: absolute;
   bottom: -22px;
@@ -291,14 +270,17 @@ input[type="number"] {
   pointer-events: none;
   z-index: 0;
 }
-[data-theme="bauhaus"] .bauhaus-deco > * {
+[data-theme="bauhaus"] .bauhaus-deco > *,
+[data-theme="bauhaus-dark"] .bauhaus-deco > * {
   position: relative;
   z-index: 1;
 }
 
 /* Sharp focus rings instead of soft. */
 [data-theme="bauhaus"] button:focus-visible,
-[data-theme="bauhaus"] input:focus-visible {
-  outline: 3px solid #1a1612;
+[data-theme="bauhaus"] input:focus-visible,
+[data-theme="bauhaus-dark"] button:focus-visible,
+[data-theme="bauhaus-dark"] input:focus-visible {
+  outline: 3px solid var(--focus-ring);
   outline-offset: 2px;
 }
