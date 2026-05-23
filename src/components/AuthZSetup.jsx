@@ -5,7 +5,7 @@ import BridgeModal from './BridgeModal';
 
 export default function AuthZSetup() {
   const { granting, status, error, grant } = useSessionStore();
-  const { injAddress, ethAddress, usdtBalance } = useWalletStore();
+  const { injAddress, ethAddress, usdcBalance } = useWalletStore();
   const [showBridge, setShowBridge] = useState(false);
 
   const handleGrant = () => grant({ injAddress, ethAddress }).catch(() => {});
@@ -77,8 +77,8 @@ export default function AuthZSetup() {
         marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)',
         fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.5,
       }}>
-        {usdtBalance > 0
-          ? <>You have <span style={{ color: 'var(--green)', fontFamily: 'var(--font-mono)' }}>${usdtBalance.toFixed(2)}</span> USDT ready to bet.</>
+        {usdcBalance > 0
+          ? <>You have <span style={{ color: 'var(--green)', fontFamily: 'var(--font-mono)' }}>${usdcBalance.toFixed(2)}</span> USDC ready to bet.</>
           : 'No funds yet?'}{' '}
         <button
           onClick={() => setShowBridge(true)}

@@ -26,7 +26,7 @@ const useWalletStore = create((set, get) => ({
   connected: false,
   connecting: false,
   balances: null,
-  usdtBalance: 0,
+  usdcBalance: 0,
   error: null,
 
   connect: async () => {
@@ -50,11 +50,11 @@ const useWalletStore = create((set, get) => ({
         if (!info) {
           clearAccountsChangedListener();
           clearSession(prev);
-          set({ ethAddress: null, injAddress: null, subaccountId: null, connected: false, balances: null, usdtBalance: 0 });
+          set({ ethAddress: null, injAddress: null, subaccountId: null, connected: false, balances: null, usdcBalance: 0 });
         } else if (info.injAddress !== prev) {
           // Different wallet swapped in — the old session must not carry over.
           clearSession(prev);
-          set({ ethAddress: info.ethAddress, injAddress: info.injAddress, subaccountId: info.subaccountId, balances: null, usdtBalance: 0 });
+          set({ ethAddress: info.ethAddress, injAddress: info.injAddress, subaccountId: info.subaccountId, balances: null, usdcBalance: 0 });
           get().refreshBalances();
         } else {
           // Same wallet — benign event, just refresh balances.
@@ -77,7 +77,7 @@ const useWalletStore = create((set, get) => ({
       subaccountId: null,
       connected: false,
       balances: null,
-      usdtBalance: 0,
+      usdcBalance: 0,
       error: null,
     });
   },
@@ -87,7 +87,7 @@ const useWalletStore = create((set, get) => ({
     if (!injAddress) return;
     try {
       const balances = await fetchBalances(injAddress);
-      set({ balances, usdtBalance: balances.usdtTotal });
+      set({ balances, usdcBalance: balances.usdcTotal });
     } catch (err) {
       console.error('Failed to fetch balances:', err);
     }

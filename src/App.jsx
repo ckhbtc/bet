@@ -70,7 +70,7 @@ export default function App() {
     return () => { window.removeEventListener('keydown', onKey); clearTimeout(timer); };
   }, []);
 
-  const { connected, injAddress, usdtBalance, refreshBalances } = useWalletStore();
+  const { connected, injAddress, usdcBalance, refreshBalances } = useWalletStore();
   const { markets, positions, loading, startPolling, stopPolling } = useMarketStore();
   const session = useSessionStore();
 
@@ -324,7 +324,7 @@ export default function App() {
               ) : (
                 <BetPanel
                   market={selectedMarket}
-                  balance={usdtBalance}
+                  balance={usdcBalance}
                   onConfirm={handleBetConfirm}
                   onClose={() => setSelectedMarket(null)}
                 />

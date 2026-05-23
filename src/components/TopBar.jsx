@@ -16,7 +16,7 @@ export default function TopBar({
   revokingAutosign,
   devMode,
 }) {
-  const { connected, connecting, ethAddress, injAddress, usdtBalance, connect, disconnect, error } = useWalletStore();
+  const { connected, connecting, ethAddress, injAddress, usdcBalance, connect, disconnect, error } = useWalletStore();
 
   return (
     <header style={{
@@ -143,7 +143,7 @@ export default function TopBar({
             }}>
               <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Balance</span>
               <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--green)', fontFamily: 'var(--font-mono)' }}>
-                ${usdtBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                ${usdcBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
               </span>
             </div>
             <div
