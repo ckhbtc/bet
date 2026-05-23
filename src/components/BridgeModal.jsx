@@ -56,7 +56,7 @@ function shortHash(h) {
 }
 
 export default function BridgeModal({ onClose }) {
-  const { ethAddress, injAddress, refreshBalances } = useWalletStore();
+  const { ethAddress, injAddress, refreshBalances, pollBalancesUntilChange } = useWalletStore();
 
   const [sourceChainId, setSourceChainId] = useState(SOURCE_CHAINS[0].id);
   const [amount, setAmount] = useState('');
@@ -159,7 +159,11 @@ export default function BridgeModal({ onClose }) {
         onBeforeMint: () => ensureMintGas({ ethAddress, injAddress }),
       });
       setSuccess(result);
+      // Optimistic kick first so the TopBar pill updates promptly, then
+      // poll until the indexer catches up to the freshly-minted amount.
       refreshBalances();
+      const expectedDelta = Number(amount) || 0;
+      pollBalancesUntilChange({ expectedDelta }).catch(() => {});
     } catch (err) {
       const msg = err.shortMessage || err.message || String(err);
       setError(
@@ -170,7 +174,10 @@ export default function BridgeModal({ onClose }) {
     } finally {
       setBridging(false);
     }
-  }, [amount, sourceChainId, ethAddress, injAddress, refreshBalances, transferMode]);
+  }, [
+    amount, sourceChainId, ethAddress, injAddress, transferMode,
+    refreshBalances, pollBalancesUntilChange,
+  ]);
 
   const handleMax = () => {
     if (srcBalance && srcBalance > 0n) {

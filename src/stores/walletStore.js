@@ -92,6 +92,40 @@ const useWalletStore = create((set, get) => ({
       console.error('Failed to fetch balances:', err);
     }
   },
+
+  // Poll fetchBalances until usdcTotal exceeds the starting snapshot, or
+  // until the timeout. The Injective portfolio indexer can lag a few
+  // seconds behind a fresh on-chain mint (CCTP V2 receiveMessage), so
+  // after a bridge the first refreshBalances often still shows the old
+  // total. Caller passes `expectedDelta` so we can fast-exit on a partial
+  // increase (e.g. bridged 12 → balance went from 0 to 12.0, but indexer
+  // may briefly report 11.999 due to precision rounding).
+  pollBalancesUntilChange: async ({
+    timeoutMs = 30_000,
+    intervalMs = 2_000,
+    expectedDelta = 0,
+  } = {}) => {
+    const { injAddress } = get();
+    if (!injAddress) return false;
+    const start = get().usdcBalance || 0;
+    const target = start + Math.max(0, expectedDelta * 0.99); // 1% slack
+    const deadline = Date.now() + timeoutMs;
+
+    while (Date.now() < deadline) {
+      try {
+        const balances = await fetchBalances(injAddress);
+        set({ balances, usdcBalance: balances.usdcTotal });
+        if (balances.usdcTotal > start && balances.usdcTotal >= target) {
+          return true;
+        }
+      } catch (err) {
+        // transient indexer hiccup — keep polling
+        console.warn('balance poll iteration failed:', err.message || err);
+      }
+      await new Promise((r) => setTimeout(r, intervalMs));
+    }
+    return false;
+  },
 }));
 
 export default useWalletStore;
