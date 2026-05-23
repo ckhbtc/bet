@@ -7,6 +7,7 @@
 
 import express from 'express';
 import { initAccount } from './faucet.js';
+import { relayMint } from './relayMint.js';
 
 const router = express.Router();
 router.use(express.json({ limit: '64kb' }));
@@ -21,6 +22,18 @@ router.post('/init-account', async (req, res) => {
     res.json({ ok: true, txHash });
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/relay-mint', async (req, res) => {
+  try {
+    const { message, attestation } = req.body || {};
+    const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown';
+    const txHash = await relayMint({ message, attestation }, ip);
+    res.json({ ok: true, txHash });
+  } catch (err) {
+    const code = /Rate limit|Invalid|Message dst/.test(err.message) ? 400 : 500;
+    res.status(code).json({ error: err.message });
   }
 });
 
