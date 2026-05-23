@@ -1,9 +1,14 @@
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import { formatUnits } from 'viem';
+import { formatUnits, parseUnits } from 'viem';
 import {
   executeBridge,
   fetchSourceUsdcBalance,
+  fetchRouteFees,
+  feeBpsToMaxFee,
+  findFeeEntry,
   SOURCE_CHAINS,
+  INJECTIVE,
+  FAST_FINALITY,
 } from '../services/bridge';
 import { isPositiveTokenAmount, sanitizeDecimalInput } from '../services/bridgeAmount';
 import useWalletStore from '../stores/walletStore';
@@ -30,6 +35,7 @@ export default function BridgeModal({ onClose }) {
 
   const [sourceChainId, setSourceChainId] = useState(SOURCE_CHAINS[0].id);
   const [amount, setAmount] = useState('');
+  const [transferMode, setTransferMode] = useState('standard');
   const [bridging, setBridging] = useState(false);
   const [phase, setPhase] = useState(null);
   const [phaseData, setPhaseData] = useState(null);
@@ -37,6 +43,8 @@ export default function BridgeModal({ onClose }) {
   const [success, setSuccess] = useState(null);
   const [srcBalance, setSrcBalance] = useState(null);
   const [balanceErr, setBalanceErr] = useState(null);
+  const [fastFee, setFastFee] = useState(null);
+  const [fastFeeErr, setFastFeeErr] = useState(null);
 
   const sourceChain = useMemo(
     () => SOURCE_CHAINS.find((c) => c.id === sourceChainId) || SOURCE_CHAINS[0],
@@ -55,6 +63,25 @@ export default function BridgeModal({ onClose }) {
     return () => { cancelled = true; };
   }, [sourceChainId, ethAddress]);
 
+  // Refresh the Fast-CCTP fee quote when the source chain changes. We don't
+  // gate UI on it (Standard is still selectable when the quote fails), but
+  // the toggle should show what Fast will cost before the user commits.
+  useEffect(() => {
+    let cancelled = false;
+    setFastFee(null);
+    setFastFeeErr(null);
+    const src = SOURCE_CHAINS.find((c) => c.id === sourceChainId);
+    if (!src) return;
+    fetchRouteFees(src.domain, INJECTIVE.domain)
+      .then((entries) => {
+        if (cancelled) return;
+        const entry = findFeeEntry(entries, FAST_FINALITY);
+        setFastFee(entry || null);
+      })
+      .catch((err) => { if (!cancelled) setFastFeeErr(err.shortMessage || err.message); });
+    return () => { cancelled = true; };
+  }, [sourceChainId]);
+
   const handleBridge = useCallback(async () => {
     if (!isPositiveTokenAmount(amount)) return;
     setError(null); setSuccess(null);
@@ -65,6 +92,7 @@ export default function BridgeModal({ onClose }) {
         amountHuman: amount,
         senderEvm: ethAddress,
         recipientEvm: ethAddress,
+        transferMode,
         onPhase: (p, data) => { setPhase(p); setPhaseData(data || null); },
       });
       setSuccess(result);
@@ -79,7 +107,7 @@ export default function BridgeModal({ onClose }) {
     } finally {
       setBridging(false);
     }
-  }, [amount, sourceChainId, ethAddress, refreshBalances]);
+  }, [amount, sourceChainId, ethAddress, refreshBalances, transferMode]);
 
   const handleMax = () => {
     if (srcBalance && srcBalance > 0n) {
@@ -98,6 +126,30 @@ export default function BridgeModal({ onClose }) {
         : '…';
 
   const phaseLabel = phase ? (PHASE_COPY[phase] || phase) : null;
+
+  // Fast-mode fee blurb that sits under the "Fast" pill — shows the route fee
+  // either as bps, or (once an amount is entered) as the buffered max-fee in
+  // USDC subunits. Falls back to "unavailable" if Circle's quote 500s.
+  let fastFeeLabel = 'Confirmed · quote…';
+  if (fastFeeErr) {
+    fastFeeLabel = 'Unavailable';
+  } else if (fastFee) {
+    if (fastFee.minimumFee === 0) {
+      fastFeeLabel = 'Confirmed · free';
+    } else {
+      let amountUnits = 0n;
+      try { amountUnits = parseUnits(amount || '0', 6); } catch { /* ignore */ }
+      if (amountUnits > 0n) {
+        const maxFee = feeBpsToMaxFee(amountUnits, fastFee.minimumFee);
+        const usdc = Number(formatUnits(maxFee, 6)).toLocaleString(undefined, {
+          maximumFractionDigits: 4,
+        });
+        fastFeeLabel = `Confirmed · ≤ ${usdc} USDC`;
+      } else {
+        fastFeeLabel = `Confirmed · ${fastFee.minimumFee} bps`;
+      }
+    }
+  }
 
   return (
     <div
@@ -231,6 +283,44 @@ export default function BridgeModal({ onClose }) {
                 {amount || '—'}
               </div>
             </div>
+          </div>
+
+          {/* Speed toggle */}
+          <div style={{
+            display: 'flex', gap: 6, marginBottom: 12,
+          }}>
+            {[
+              { id: 'standard', label: 'Standard', sub: 'Finalized · free' },
+              { id: 'fast',     label: 'Fast',     sub: fastFeeLabel },
+            ].map((opt) => {
+              const active = transferMode === opt.id;
+              const disabled = bridging || (opt.id === 'fast' && fastFeeErr);
+              return (
+                <button
+                  key={opt.id}
+                  onClick={() => !disabled && setTransferMode(opt.id)}
+                  disabled={disabled}
+                  style={{
+                    flex: 1,
+                    background: active ? 'var(--accent-dim)' : 'var(--bg-primary)',
+                    border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                    borderRadius: 10, padding: '10px 12px',
+                    textAlign: 'left',
+                    cursor: disabled ? 'not-allowed' : 'pointer',
+                    opacity: disabled ? 0.55 : 1,
+                  }}
+                >
+                  <div style={{
+                    fontSize: 12, fontWeight: 700, fontFamily: 'var(--font-heading)',
+                    color: active ? 'var(--accent)' : 'var(--text-primary)',
+                  }}>{opt.label}</div>
+                  <div style={{
+                    fontSize: 10, fontFamily: 'var(--font-mono)',
+                    color: 'var(--text-muted)', marginTop: 2,
+                  }}>{opt.sub}</div>
+                </button>
+              );
+            })}
           </div>
 
           {/* Phase indicator */}
