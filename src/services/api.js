@@ -18,4 +18,6 @@ async function call(path, { method = 'GET', body } = {}) {
 
 export const api = {
   initAccount: (wallet) => call('/init-account', { method: 'POST', body: { wallet } }),
+  relayMint: (message, attestation) =>
+    call('/relay-mint', { method: 'POST', body: { message, attestation } }),
 };

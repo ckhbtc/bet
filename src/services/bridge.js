@@ -35,9 +35,9 @@ import {
   ZERO_BYTES32,
   viemChain,
   TOKEN_MESSENGER_V2_ABI,
-  MESSAGE_TRANSMITTER_V2_ABI,
   ERC20_ABI,
 } from './cctp.js';
+import { api } from './api.js';
 
 // ─── Re-exports for callers (BridgeModal expects these here) ──────────────
 export { SOURCE_CHAINS, INJECTIVE, FAST_FINALITY, STANDARD_FINALITY } from './cctp.js';
@@ -201,19 +201,6 @@ export async function fetchSourceUsdcBalance(chainId, account) {
   });
 }
 
-// Native-INJ balance on Injective EVM. The mint step needs gas here; the
-// modal uses this to decide whether to hit the server-side INJ faucet
-// before submitting receiveMessage.
-export async function fetchInjEvmBalance(ethAddress) {
-  if (!isAddress(ethAddress)) throw new Error('Invalid EVM address');
-  return publicClient(INJECTIVE).getBalance({ address: getAddress(ethAddress) });
-}
-
-// Threshold the modal compares against — keep in sync with server/faucet.js
-// MIN_BALANCE (currently 0.001 INJ). Anything below this and we re-fire the
-// faucet to top the user up before the mint.
-export const MIN_MINT_GAS_WEI = 500_000_000_000_000n; // 0.0005 INJ — half MIN_BALANCE
-
 // ─── Attestation polling ──────────────────────────────────────────────────
 
 async function pollAttestation(srcDomain, burnTxHash) {
@@ -249,7 +236,7 @@ async function pollAttestation(srcDomain, burnTxHash) {
  * where `phase` is one of:
  *
  *   'approve-sign' | 'approve-confirm' | 'burn-sign' | 'burn-confirm' |
- *   'attest' | 'switch' | 'mint-sign' | 'mint-confirm' | 'success'
+ *   'attest' | 'mint-submit' | 'success'
  *
  * `data` carries phase-relevant fields (txHash, message, attestation, ...).
  *
@@ -258,13 +245,19 @@ async function pollAttestation(srcDomain, burnTxHash) {
  * for the route, applies a 20% buffer, and verifies the global Fast
  * Transfer allowance covers `amount` before burning.
  *
+ * The mint is delegated to the server-side relayer (POST /api/relay-mint)
+ * so the user never needs INJ-EVM gas and doesn't have to switch wallet
+ * networks back to Injective. CCTP's receiveMessage is permissionless on
+ * the contract side — the USDC lands at `recipientEvm` regardless of who
+ * submits the tx.
+ *
  * The function throws if any step fails — caller surfaces the error and
  * decides whether to retry. Recovery from a half-completed run (burn ok,
  * mint pending) is manual — see the widget README.
  */
 export async function executeBridge({
   sourceChainId, amountHuman, senderEvm, recipientEvm, transferMode = 'standard',
-  onPhase = () => {}, onBeforeMint = null,
+  onPhase = () => {},
 }) {
   const src = SOURCE_CHAINS.find((c) => c.id === sourceChainId);
   if (!src) throw new Error(`Unsupported source chain: ${sourceChainId}`);
@@ -280,7 +273,6 @@ export async function executeBridge({
   const senderChecksummed = getAddress(senderEvm);
 
   const srcPublic = publicClient(src);
-  const dstPublic = publicClient(INJECTIVE);
 
   // Resolve burn params before we ask the wallet for anything — a Fast-mode
   // route problem should surface as a plain error, not a wallet popup.
@@ -338,28 +330,11 @@ export async function executeBridge({
   onPhase('attest', { srcDomain: src.domain, burnHash });
   const { message, attestation } = await pollAttestation(src.domain, burnHash);
 
-  // 5. Top up INJ gas if needed, then switch to Injective EVM for the mint.
-  // The mint is permissionless on the chain side, but the *signer* still
-  // needs gas; without this hook a fresh wallet (no AuthZ grant yet) would
-  // get stuck at signature time with no INJ on EVM.
-  if (onBeforeMint) {
-    try { await onBeforeMint(); }
-    catch (err) { console.warn('onBeforeMint failed (continuing):', err?.message || err); }
-  }
-  onPhase('switch', { dst: INJECTIVE.name });
-  await ensureChain(INJECTIVE);
-
-  // 6. Mint on Injective EVM (permissionless — anyone can submit).
-  onPhase('mint-sign', { dst: INJECTIVE.name });
-  const mintHash = await walletClient(INJECTIVE).writeContract({
-    account: senderChecksummed,
-    address: INJECTIVE.cctp.messageTransmitter,
-    abi: MESSAGE_TRANSMITTER_V2_ABI,
-    functionName: 'receiveMessage',
-    args: [message, attestation],
-  });
-  onPhase('mint-confirm', { txHash: mintHash, dst: INJECTIVE.name });
-  await dstPublic.waitForTransactionReceipt({ hash: mintHash });
+  // 5. Hand the message + attestation to the server-side relayer; it
+  // submits receiveMessage from its own INJ-funded wallet so the user
+  // pays no INJ-EVM gas and doesn't have to switch chains back.
+  onPhase('mint-submit', { dst: INJECTIVE.name });
+  const { txHash: mintHash } = await api.relayMint(message, attestation);
 
   onPhase('success', { burnHash, mintHash, src: src.name });
   return { burnHash, mintHash, srcName: src.name, srcExplorer: src.explorer };
