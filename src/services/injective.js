@@ -77,7 +77,7 @@ export async function listMarkets() {
       maintenanceMarginRatio: String(m.maintenanceMarginRatio || '0.02'),
       takerFeeRate: String(m.takerFeeRate || '0.001'),
       oracleBase,
-      oracleQuote: String(m.oracleQuote || 'USDT'),
+      oracleQuote: String(m.oracleQuote || 'USDC'),
       oracleType: String(m.oracleType || 'bandibc'),
     });
   }

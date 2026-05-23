@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { listMarkets, fetchAllPrices, fetchPositions, fetchMarketsSummary } from '../services/injective';
 
-// Only show USDT perp markets for these symbols. Order here = display order.
+// Only show USDC perp markets for these symbols. Order here = display order.
 const FEATURED_SYMBOLS = [
   'BTC', 'ETH', 'INJ', 'SOL', 'XRP', 'BNB',
   'TSLA', 'META', 'AAVE', 'COIN', 'AMZN', 'MSTR',
@@ -21,11 +21,11 @@ const useMarketStore = create((set, get) => ({
     try {
       const allMarkets = await listMarkets();
 
-      // Pick the first matching USDT perp per featured symbol, preserving the
+      // Pick the first matching USDC perp per featured symbol, preserving the
       // declared display order. Symbols missing from chain are silently skipped.
-      const usdtPerps = allMarkets.filter(m => m.ticker.toUpperCase().includes('USDT'));
+      const usdcPerps = allMarkets.filter(m => m.ticker.toUpperCase().includes('USDC'));
       const markets = FEATURED_SYMBOLS
-        .map(sym => usdtPerps.find(m => m.symbol.toUpperCase() === sym))
+        .map(sym => usdcPerps.find(m => m.symbol.toUpperCase() === sym))
         .filter(Boolean);
 
       // Oracle prices + 24h market summary in parallel.

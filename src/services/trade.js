@@ -48,7 +48,7 @@ async function getMarket(marketId) {
         minQuantityTickSize: String(m.minQuantityTickSize || '0.001'),
         initialMarginRatio: String(m.initialMarginRatio || '0.05'),
         oracleBase: String(m.oracleBase || ''),
-        oracleQuote: String(m.oracleQuote || 'USDT'),
+        oracleQuote: String(m.oracleQuote || 'USDC'),
         oracleType: String(m.oracleType || 'bandibc'),
       });
     }
