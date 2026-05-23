@@ -21,10 +21,14 @@ const oracleApi = new IndexerGrpcOracleApi(endpoints.indexer);
 const portfolioApi = new IndexerGrpcAccountPortfolioApi(endpoints.indexer);
 const chronosDerivativesApi = new IndexerRestDerivativesChronosApi(`${endpoints.chronos}/api/chronos/v1/derivative`);
 
-const USDT_DECIMALS = 6;
+const QUOTE_DECIMALS = 6;
 const INJ_DECIMALS = 18;
 
-// ─── Token registry for Peggy-bridged tokens ─────────────────────────────────
+// ─── Token registry ──────────────────────────────────────────────────────────
+//
+// Peggy entries cover the legacy Ethereum-bridged stables.
+// ERC20 entries cover Injective-EVM-native tokens (the quote denom format
+// the exchange module uses for the new USDC perps is `erc20:<addr>`).
 
 const PEGGY_REGISTRY = {
   '0xdac17f958d2ee523a2206206994597c13d831ec7': { symbol: 'USDT', decimals: 6 },
@@ -32,11 +36,20 @@ const PEGGY_REGISTRY = {
   '0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48': { symbol: 'USDC', decimals: 6 },
 };
 
+const ERC20_REGISTRY = {
+  '0xa00c59ff5a080d2b954d0c75e46e22a0c371235a': { symbol: 'USDC', decimals: 6 },
+  '0x88f7f2b685f9692caf8c478f5badf09ee9b1cc13': { symbol: 'USDT', decimals: 6 },
+};
+
 function resolveDenom(denom) {
   if (denom === 'inj') return { symbol: 'INJ', decimals: INJ_DECIMALS };
   if (denom.startsWith('peggy0x') || denom.startsWith('peggy0X')) {
     const addr = denom.slice('peggy'.length).toLowerCase();
     return PEGGY_REGISTRY[addr] || null;
+  }
+  if (denom.startsWith('erc20:0x') || denom.startsWith('erc20:0X')) {
+    const addr = denom.slice('erc20:'.length).toLowerCase();
+    return ERC20_REGISTRY[addr] || null;
   }
   return null;
 }
@@ -155,7 +168,7 @@ export async function fetchMarketsSummary() {
 export async function fetchBalances(injAddress) {
   const portfolio = await portfolioApi.fetchAccountPortfolioBalances(injAddress);
 
-  const result = { bank: [], subaccount: [], usdtTotal: 0 };
+  const result = { bank: [], subaccount: [], usdcTotal: 0 };
 
   // Bank balances
   for (const b of portfolio.bankBalancesList || []) {
@@ -164,7 +177,7 @@ export async function fetchBalances(injAddress) {
     const amt = new Decimal(b.amount || '0').div(new Decimal(10).pow(token.decimals));
     if (amt.gt(0.0001)) {
       result.bank.push({ symbol: token.symbol, amount: amt.toNumber(), denom: b.denom });
-      if (token.symbol === 'USDT') result.usdtTotal += amt.toNumber();
+      if (token.symbol === 'USDC') result.usdcTotal += amt.toNumber();
     }
   }
 
@@ -175,7 +188,7 @@ export async function fetchBalances(injAddress) {
     const avail = new Decimal(s.deposit?.availableBalance || '0').div(new Decimal(10).pow(token.decimals));
     if (avail.gt(0.0001)) {
       result.subaccount.push({ symbol: token.symbol, amount: avail.toNumber(), denom: s.denom });
-      if (token.symbol === 'USDT') result.usdtTotal += avail.toNumber();
+      if (token.symbol === 'USDC') result.usdcTotal += avail.toNumber();
     }
   }
 
@@ -193,7 +206,7 @@ export async function fetchPositions(injAddress) {
     fetchOpenOrders(injAddress).catch(() => ({ orders: [] })),
   ]);
 
-  const SCALE = new Decimal(10).pow(USDT_DECIMALS);
+  const SCALE = new Decimal(10).pow(QUOTE_DECIMALS);
 
   // Index reduce-only limit orders by marketId so we can attach TPs per position.
   const tpByMarket = new Map();
