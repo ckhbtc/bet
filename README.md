@@ -87,7 +87,7 @@ src/
 │   ├── authzMessages.js     # shared AuthZ grant/revoke message builders
 │   ├── injective.js         # read APIs (markets, prices, balances, positions)
 │   ├── api.js               # only initAccount (faucet) hits the server
-│   ├── bridge.js            # deBridge inbound from Arbitrum USDC → Injective USDT
+│   ├── bridge.js            # deBridge inbound from Arbitrum USDC → Injective USDC
 │   └── wallet.js            # connect/disconnect MetaMask + accountsChanged
 ├── stores/                  # zustand: walletStore, sessionStore, marketStore
 ├── styles/global.css        # CSS-vars-based theming (3 themes)
