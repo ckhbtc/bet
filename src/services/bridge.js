@@ -201,6 +201,19 @@ export async function fetchSourceUsdcBalance(chainId, account) {
   });
 }
 
+// Native-INJ balance on Injective EVM. The mint step needs gas here; the
+// modal uses this to decide whether to hit the server-side INJ faucet
+// before submitting receiveMessage.
+export async function fetchInjEvmBalance(ethAddress) {
+  if (!isAddress(ethAddress)) throw new Error('Invalid EVM address');
+  return publicClient(INJECTIVE).getBalance({ address: getAddress(ethAddress) });
+}
+
+// Threshold the modal compares against — keep in sync with server/faucet.js
+// MIN_BALANCE (currently 0.001 INJ). Anything below this and we re-fire the
+// faucet to top the user up before the mint.
+export const MIN_MINT_GAS_WEI = 500_000_000_000_000n; // 0.0005 INJ — half MIN_BALANCE
+
 // ─── Attestation polling ──────────────────────────────────────────────────
 
 async function pollAttestation(srcDomain, burnTxHash) {
@@ -251,7 +264,7 @@ async function pollAttestation(srcDomain, burnTxHash) {
  */
 export async function executeBridge({
   sourceChainId, amountHuman, senderEvm, recipientEvm, transferMode = 'standard',
-  onPhase = () => {},
+  onPhase = () => {}, onBeforeMint = null,
 }) {
   const src = SOURCE_CHAINS.find((c) => c.id === sourceChainId);
   if (!src) throw new Error(`Unsupported source chain: ${sourceChainId}`);
@@ -325,7 +338,14 @@ export async function executeBridge({
   onPhase('attest', { srcDomain: src.domain, burnHash });
   const { message, attestation } = await pollAttestation(src.domain, burnHash);
 
-  // 5. Switch to Injective EVM for the mint.
+  // 5. Top up INJ gas if needed, then switch to Injective EVM for the mint.
+  // The mint is permissionless on the chain side, but the *signer* still
+  // needs gas; without this hook a fresh wallet (no AuthZ grant yet) would
+  // get stuck at signature time with no INJ on EVM.
+  if (onBeforeMint) {
+    try { await onBeforeMint(); }
+    catch (err) { console.warn('onBeforeMint failed (continuing):', err?.message || err); }
+  }
   onPhase('switch', { dst: INJECTIVE.name });
   await ensureChain(INJECTIVE);
 

@@ -3,15 +3,40 @@ import { formatUnits, parseUnits } from 'viem';
 import {
   executeBridge,
   fetchSourceUsdcBalance,
+  fetchInjEvmBalance,
   fetchRouteFees,
   feeBpsToMaxFee,
   findFeeEntry,
+  MIN_MINT_GAS_WEI,
   SOURCE_CHAINS,
   INJECTIVE,
   FAST_FINALITY,
 } from '../services/bridge';
 import { isPositiveTokenAmount, sanitizeDecimalInput } from '../services/bridgeAmount';
+import { api } from '../services/api';
 import useWalletStore from '../stores/walletStore';
+
+// Best-effort INJ-EVM top-up: balance-check first to avoid hitting the
+// faucet's 60s cooldown when the user already has gas, then call the
+// server-side faucet. Errors are surfaced via the returned object but
+// never throw — the mint can still succeed even if this fails (the user
+// may already have INJ from another action).
+async function ensureMintGas({ ethAddress, injAddress, signal }) {
+  if (!ethAddress || !injAddress) return { ok: false, reason: 'no-wallet' };
+  try {
+    const bal = await fetchInjEvmBalance(ethAddress);
+    if (bal >= MIN_MINT_GAS_WEI) return { ok: true, reason: 'already-funded' };
+    if (signal?.aborted) return { ok: false, reason: 'aborted' };
+    await api.initAccount(injAddress);
+    return { ok: true, reason: 'faucet-fired' };
+  } catch (err) {
+    const msg = err?.message || String(err);
+    // "Please wait before retrying" — cooldown is benign, we already
+    // fired the faucet recently and the tx will land in time.
+    if (msg.includes('Please wait')) return { ok: true, reason: 'cooldown' };
+    return { ok: false, reason: msg };
+  }
+}
 
 // Human-readable status copy keyed by the phase emitted by executeBridge().
 const PHASE_COPY = {
@@ -31,7 +56,7 @@ function shortHash(h) {
 }
 
 export default function BridgeModal({ onClose }) {
-  const { ethAddress, refreshBalances } = useWalletStore();
+  const { ethAddress, injAddress, refreshBalances } = useWalletStore();
 
   const [sourceChainId, setSourceChainId] = useState(SOURCE_CHAINS[0].id);
   const [amount, setAmount] = useState('');
@@ -62,6 +87,21 @@ export default function BridgeModal({ onClose }) {
       .catch((err) => { if (!cancelled) setBalanceErr(err.shortMessage || err.message); });
     return () => { cancelled = true; };
   }, [sourceChainId, ethAddress]);
+
+  // Kick the INJ-EVM faucet in the background as soon as the modal opens.
+  // The mint step at the end needs gas; firing now means by the time the
+  // attestation poll completes (1–13 min) the user is already funded. The
+  // faucet has its own 60s cooldown and "already_funded" short-circuit,
+  // so re-opens are cheap.
+  useEffect(() => {
+    const ctrl = new AbortController();
+    ensureMintGas({ ethAddress, injAddress, signal: ctrl.signal }).then((res) => {
+      if (!res.ok && res.reason !== 'aborted') {
+        console.warn('inj-evm gas pre-fund skipped:', res.reason);
+      }
+    });
+    return () => ctrl.abort();
+  }, [ethAddress, injAddress]);
 
   // Refresh the Fast-CCTP fee quote when the source chain changes. We don't
   // gate UI on it (Standard is still selectable when the quote fails), but
@@ -94,6 +134,10 @@ export default function BridgeModal({ onClose }) {
         recipientEvm: ethAddress,
         transferMode,
         onPhase: (p, data) => { setPhase(p); setPhaseData(data || null); },
+        // Defensive re-top-up: if attestation took long enough that the
+        // mount-time prefund cooldown expired and the wallet still has no
+        // INJ, this catches it before the mint signer rejects.
+        onBeforeMint: () => ensureMintGas({ ethAddress, injAddress }),
       });
       setSuccess(result);
       refreshBalances();
@@ -107,7 +151,7 @@ export default function BridgeModal({ onClose }) {
     } finally {
       setBridging(false);
     }
-  }, [amount, sourceChainId, ethAddress, refreshBalances, transferMode]);
+  }, [amount, sourceChainId, ethAddress, injAddress, refreshBalances, transferMode]);
 
   const handleMax = () => {
     if (srcBalance && srcBalance > 0n) {
