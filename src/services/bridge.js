@@ -1,6 +1,13 @@
 /**
- * deBridge DLN inbound: Arbitrum USDC → Injective EVM USDT.
+ * deBridge DLN inbound: Arbitrum USDC → Injective USDC (IBC variant).
  * User signs approve + bridge tx on Arbitrum via MetaMask.
+ *
+ * Note: deBridge currently routes USDC to the IBC USDC denom
+ * (transfer/channel-148/uusdc, EVM 0x2a25fbd6…) — not the native
+ * erc20:0xa00c59ff… that the new USDC perps quote in. Users may need
+ * to swap IBC USDC → native USDC on Helix before placing a bet.
+ * deBridge support for the native CCTP USDC denom is pending; once
+ * live, repoint BRIDGE_DST_TOKEN at 0xa00c59ff5a080d2b954d0c75e46e22a0c371235a.
  */
 
 import { formatTokenUnits, parseTokenUnits } from './bridgeAmount';
@@ -10,7 +17,7 @@ const ARBITRUM_ID = 42161;
 const INJECTIVE_DLN = 100000029;
 
 export const BRIDGE_SRC_TOKEN = '0xaf88d065e77c8cc2239327c5edb3a432268e5831'; // USDC on Arbitrum
-export const BRIDGE_DST_TOKEN = '0x88f7f2b685f9692caf8c478f5badf09ee9b1cc13'; // USDT on Injective EVM
+export const BRIDGE_DST_TOKEN = '0x2a25fbd67b3ae485e461fe55d9dbef302b7d3989'; // USDC (IBC) on Injective EVM
 
 function encodeApprove(spender, amount) {
   const sel = '095ea7b3';

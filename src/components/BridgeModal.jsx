@@ -131,7 +131,7 @@ export default function BridgeModal({ onClose }) {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
               <div>
                 <div style={{ fontSize: 16, fontWeight: 700, fontFamily: 'var(--font-heading)' }}>Injective</div>
-                <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>USDT</div>
+                <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>USDC</div>
               </div>
               <div style={{
                 fontSize: 22, fontWeight: 700, fontFamily: 'var(--font-mono)',
@@ -156,7 +156,7 @@ export default function BridgeModal({ onClose }) {
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-muted)' }}>You receive</span>
-                <span style={{ color: 'var(--green)' }}>~{quote.dstAmount} USDT</span>
+                <span style={{ color: 'var(--green)' }}>~{quote.dstAmount} USDC</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <span style={{ color: 'var(--text-muted)' }}>Fee (ETH on Arb)</span>
