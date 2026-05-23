@@ -20,9 +20,7 @@ const PHASE_COPY = {
   'burn-sign':       'Burn USDC — confirm in wallet',
   'burn-confirm':    'Burning on source chain...',
   attest:            'Waiting for Circle attestation (1–13 min)...',
-  switch:            'Switching wallet to Injective EVM...',
-  'mint-sign':       'Mint on Injective — confirm in wallet',
-  'mint-confirm':    'Minting native USDC on Injective...',
+  'mint-submit':     'Minting native USDC on Injective...',
   success:           'Bridge complete',
 };
 
@@ -505,8 +503,8 @@ export default function BridgeModal({ onClose }) {
             marginTop: 12, lineHeight: 1.5,
           }}>
             Circle CCTP V2 — burn USDC on the source chain, mint native USDC on
-            Injective. You'll need gas on both ends (source chain + a tiny bit of
-            INJ for the mint).
+            Injective. Mint gas is on us; you'll only need gas for the burn on
+            the source chain.
           </div>
         </div>
       </div>
