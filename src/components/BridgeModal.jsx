@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import { formatUnits, parseUnits } from 'viem';
 import {
   executeBridge,
@@ -70,6 +70,8 @@ export default function BridgeModal({ onClose }) {
   const [balanceErr, setBalanceErr] = useState(null);
   const [fastFee, setFastFee] = useState(null);
   const [fastFeeErr, setFastFeeErr] = useState(null);
+  const [chainMenuOpen, setChainMenuOpen] = useState(false);
+  const chainMenuRef = useRef(null);
 
   const sourceChain = useMemo(
     () => SOURCE_CHAINS.find((c) => c.id === sourceChainId) || SOURCE_CHAINS[0],
@@ -87,6 +89,23 @@ export default function BridgeModal({ onClose }) {
       .catch((err) => { if (!cancelled) setBalanceErr(err.shortMessage || err.message); });
     return () => { cancelled = true; };
   }, [sourceChainId, ethAddress]);
+
+  // Close the chain menu on outside click or Escape.
+  useEffect(() => {
+    if (!chainMenuOpen) return;
+    const onDocClick = (e) => {
+      if (chainMenuRef.current && !chainMenuRef.current.contains(e.target)) {
+        setChainMenuOpen(false);
+      }
+    };
+    const onKey = (e) => { if (e.key === 'Escape') setChainMenuOpen(false); };
+    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [chainMenuOpen]);
 
   // Kick the INJ-EVM faucet in the background as soon as the modal opens.
   // The mint step at the end needs gas; firing now means by the time the
@@ -263,21 +282,89 @@ export default function BridgeModal({ onClose }) {
               </span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
-              <select
-                value={sourceChainId}
-                onChange={(e) => setSourceChainId(Number(e.target.value))}
-                disabled={bridging}
-                style={{
-                  fontSize: 16, fontWeight: 700, fontFamily: 'var(--font-heading)',
-                  background: 'transparent', border: 'none', outline: 'none',
-                  color: 'var(--text-primary)', cursor: bridging ? 'not-allowed' : 'pointer',
-                  appearance: 'none', padding: '2px 0',
-                }}
-              >
-                {SOURCE_CHAINS.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
+              <div ref={chainMenuRef} style={{ position: 'relative', flexShrink: 0 }}>
+                <button
+                  type="button"
+                  onClick={() => !bridging && setChainMenuOpen((o) => !o)}
+                  disabled={bridging}
+                  aria-haspopup="listbox"
+                  aria-expanded={chainMenuOpen}
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 8,
+                    background: 'transparent', border: 'none', outline: 'none',
+                    fontSize: 16, fontWeight: 700, fontFamily: 'var(--font-heading)',
+                    color: 'var(--text-primary)',
+                    cursor: bridging ? 'not-allowed' : 'pointer',
+                    padding: '2px 0', textTransform: 'uppercase',
+                    letterSpacing: 0.3,
+                  }}
+                >
+                  <span>{sourceChain.name}</span>
+                  <span style={{
+                    fontSize: 10, lineHeight: 1, color: 'var(--text-muted)',
+                    transform: chainMenuOpen ? 'rotate(180deg)' : 'none',
+                    transition: 'transform 0.15s ease',
+                  }}>▼</span>
+                </button>
+                {chainMenuOpen && (
+                  <div
+                    role="listbox"
+                    style={{
+                      position: 'absolute',
+                      top: 'calc(100% + 8px)',
+                      left: 0,
+                      zIndex: 300,
+                      minWidth: 220,
+                      background: 'var(--bg-card)',
+                      border: '2px solid var(--border)',
+                      boxShadow: '6px 6px 0 var(--accent-light)',
+                      padding: 4,
+                      display: 'flex', flexDirection: 'column',
+                    }}
+                  >
+                    {SOURCE_CHAINS.map((c) => {
+                      const active = c.id === sourceChainId;
+                      return (
+                        <button
+                          key={c.id}
+                          role="option"
+                          aria-selected={active}
+                          onClick={() => {
+                            setSourceChainId(c.id);
+                            setChainMenuOpen(false);
+                          }}
+                          onMouseEnter={(e) => {
+                            if (!active) e.currentTarget.style.background = 'var(--bg-card-hover)';
+                          }}
+                          onMouseLeave={(e) => {
+                            if (!active) e.currentTarget.style.background = 'transparent';
+                          }}
+                          style={{
+                            background: active ? 'var(--accent-light)' : 'transparent',
+                            border: 'none', textAlign: 'left',
+                            fontSize: 13, fontWeight: 700,
+                            fontFamily: 'var(--font-heading)',
+                            color: active ? 'var(--stamp-bg)' : 'var(--text-primary)',
+                            cursor: 'pointer',
+                            padding: '10px 12px',
+                            textTransform: 'uppercase', letterSpacing: 0.5,
+                            display: 'flex', alignItems: 'center',
+                            justifyContent: 'space-between', gap: 12,
+                          }}
+                        >
+                          <span>{c.name}</span>
+                          {active && (
+                            <span style={{
+                              fontSize: 12, fontFamily: 'var(--font-mono)',
+                              color: 'var(--accent)',
+                            }}>●</span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
               <input
                 type="text"
                 inputMode="decimal"
