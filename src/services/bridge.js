@@ -1,84 +1,84 @@
 /**
- * deBridge DLN inbound: Arbitrum USDC → Injective USDC (IBC variant).
- * User signs approve + bridge tx on Arbitrum via MetaMask.
+ * USDC inbound bridge to Injective EVM via Circle CCTP V2 burn-and-mint.
  *
- * Note: deBridge currently routes USDC to the IBC USDC denom
- * (transfer/channel-148/uusdc, EVM 0x2a25fbd6…) — not the native
- * erc20:0xa00c59ff… that the new USDC perps quote in. Users may need
- * to swap IBC USDC → native USDC on Helix before placing a bet.
- * deBridge support for the native CCTP USDC denom is pending; once
- * live, repoint BRIDGE_DST_TOKEN at 0xa00c59ff5a080d2b954d0c75e46e22a0c371235a.
+ * Replaces the previous deBridge DLN flow, which couldn't route to the
+ * native USDC denom (erc20:0xa00c59ff...) that the new USDC perps quote in.
+ * CCTP's mint side is permissionless — any wallet can submit the
+ * attestation — so a self-hosted widget like this works without a relayer.
+ *
+ * The state machine is intentionally linear; if the burn lands but the
+ * mint never gets submitted, the user can recover via the standalone
+ * widget at /Users/ck/dev/usdc-widget (see its README).
+ *
+ * Ported from /Users/ck/dev/usdc-widget/public/app.js — keep them in sync.
  */
 
-import { formatTokenUnits, parseTokenUnits } from './bridgeAmount';
+import {
+  createPublicClient,
+  createWalletClient,
+  custom,
+  http,
+  fallback,
+  parseUnits,
+  pad,
+  getAddress,
+  isAddress,
+} from 'viem';
 
-const DEBRIDGE_API = 'https://dln.debridge.finance/v1.0';
-const ARBITRUM_ID = 42161;
-const INJECTIVE_DLN = 100000029;
+import {
+  SOURCE_CHAINS,
+  INJECTIVE,
+  ATTESTATION_API,
+  STANDARD_FINALITY,
+  STANDARD_MAX_FEE,
+  ZERO_BYTES32,
+  viemChain,
+  TOKEN_MESSENGER_V2_ABI,
+  MESSAGE_TRANSMITTER_V2_ABI,
+  ERC20_ABI,
+} from './cctp.js';
 
-export const BRIDGE_SRC_TOKEN = '0xaf88d065e77c8cc2239327c5edb3a432268e5831'; // USDC on Arbitrum
-export const BRIDGE_DST_TOKEN = '0x2a25fbd67b3ae485e461fe55d9dbef302b7d3989'; // USDC (IBC) on Injective EVM
+// ─── Re-exports for callers (BridgeModal expects these here) ──────────────
+export { SOURCE_CHAINS, INJECTIVE } from './cctp.js';
 
-function encodeApprove(spender, amount) {
-  const sel = '095ea7b3';
-  const addr = spender.replace(/^0x/i, '').toLowerCase().padStart(64, '0');
-  const amt = amount.toString(16).padStart(64, '0');
-  return `0x${sel}${addr}${amt}`;
-}
+// ─── Helpers ──────────────────────────────────────────────────────────────
 
-async function callDln(params) {
-  const qs = new URLSearchParams();
-  for (const [k, v] of Object.entries(params)) {
-    if (v !== undefined) qs.set(k, v);
-  }
-  const url = `${DEBRIDGE_API}/dln/order/create-tx?${qs}`;
-  const resp = await fetch(url);
-  if (!resp.ok) {
-    const body = await resp.text().catch(() => '');
-    throw new Error(`deBridge API ${resp.status}: ${body}`);
-  }
-  return resp.json();
-}
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export async function fetchBridgeQuote(amount, recipientEvm) {
-  const srcAmountBase = parseTokenUnits(amount).toString();
-  const raw = await callDln({
-    srcChainId: String(ARBITRUM_ID),
-    srcChainTokenIn: BRIDGE_SRC_TOKEN,
-    srcChainTokenInAmount: srcAmountBase,
-    dstChainId: String(INJECTIVE_DLN),
-    dstChainTokenOut: BRIDGE_DST_TOKEN,
-    dstChainTokenOutRecipient: recipientEvm,
+function publicClient(c) {
+  return createPublicClient({
+    chain: viemChain(c),
+    transport: fallback(c.rpcs.map((url) => http(url, { timeout: 8000 }))),
   });
-  const est = raw.estimation;
-  if (!est) throw new Error('No estimation in deBridge response');
-  return {
-    srcAmount: amount,
-    srcAmountBase,
-    dstAmount: formatTokenUnits(est.dstChainTokenOut.amount, est.dstChainTokenOut.decimals),
-    dstAmountBase: est.dstChainTokenOut.amount,
-    protocolFee: raw.protocolFee ?? '0',
-    fixFeeWei: raw.fixFee ?? '1000000000000000',
-  };
 }
 
-async function switchToArbitrum() {
-  const chainHex = '0xa4b1';
+function walletClient(chain) {
+  if (!window.ethereum) {
+    throw new Error('No wallet detected. Connect MetaMask to bridge.');
+  }
+  return createWalletClient({
+    chain: viemChain(chain),
+    transport: custom(window.ethereum),
+  });
+}
+
+async function ensureChain(chain) {
+  const hexId = '0x' + chain.id.toString(16);
   try {
     await window.ethereum.request({
       method: 'wallet_switchEthereumChain',
-      params: [{ chainId: chainHex }],
+      params: [{ chainId: hexId }],
     });
   } catch (err) {
-    if (err?.code === 4902) {
+    if (err.code === 4902 || err?.data?.originalError?.code === 4902) {
       await window.ethereum.request({
         method: 'wallet_addEthereumChain',
         params: [{
-          chainId: chainHex,
-          chainName: 'Arbitrum One',
-          nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
-          rpcUrls: ['https://arb1.arbitrum.io/rpc'],
-          blockExplorerUrls: ['https://arbiscan.io'],
+          chainId: hexId,
+          chainName: chain.name,
+          nativeCurrency: chain.nativeCurrency,
+          rpcUrls: chain.rpcs,
+          blockExplorerUrls: [chain.explorer],
         }],
       });
     } else {
@@ -87,92 +87,148 @@ async function switchToArbitrum() {
   }
 }
 
-async function switchBackTo(chainId) {
-  try {
-    await window.ethereum.request({
-      method: 'wallet_switchEthereumChain',
-      params: [{ chainId }],
-    });
-  } catch {
-    // user can switch manually
-  }
-}
+// ─── Source-side reads ────────────────────────────────────────────────────
 
-async function waitForReceipt(txHash, maxMs = 90_000) {
-  const deadline = Date.now() + maxMs;
-  while (Date.now() < deadline) {
-    const receipt = await window.ethereum.request({
-      method: 'eth_getTransactionReceipt',
-      params: [txHash],
-    });
-    if (receipt) return;
-    await new Promise(r => setTimeout(r, 2500));
-  }
-  throw new Error('Timed out waiting for confirmation');
-}
-
-async function sendMM({ from, to, data, value }) {
-  const txParams = { from, to, data };
-  if (value && value !== '0') txParams.value = '0x' + BigInt(value).toString(16);
-  return window.ethereum.request({ method: 'eth_sendTransaction', params: [txParams] });
-}
-
-export async function executeBridge(amount, senderEvm, recipientEvm, onProgress) {
-  const srcAmountBase = parseTokenUnits(amount).toString();
-  const originalChainId = await window.ethereum.request({ method: 'eth_chainId' });
-
-  onProgress?.('Fetching bridge calldata...');
-  const raw = await callDln({
-    srcChainId: String(ARBITRUM_ID),
-    srcChainTokenIn: BRIDGE_SRC_TOKEN,
-    srcChainTokenInAmount: srcAmountBase,
-    dstChainId: String(INJECTIVE_DLN),
-    dstChainTokenOut: BRIDGE_DST_TOKEN,
-    dstChainTokenOutRecipient: recipientEvm,
-    srcChainOrderAuthorityAddress: senderEvm,
-    dstChainOrderAuthorityAddress: recipientEvm,
+export async function fetchSourceUsdcBalance(chainId, account) {
+  const chain = SOURCE_CHAINS.find((c) => c.id === chainId);
+  if (!chain) throw new Error(`Unsupported source chain: ${chainId}`);
+  if (!isAddress(account)) throw new Error('Invalid account address');
+  return publicClient(chain).readContract({
+    address: chain.usdc,
+    abi: ERC20_ABI,
+    functionName: 'balanceOf',
+    args: [getAddress(account)],
   });
-  if (!raw.tx?.to || !raw.tx?.data) throw new Error('deBridge did not return transaction calldata');
-  const est = raw.estimation;
-  if (!est) throw new Error('No estimation in deBridge response');
+}
 
-  const estimation = {
-    srcAmount: amount,
-    srcAmountBase,
-    dstAmount: formatTokenUnits(est.dstChainTokenOut.amount, est.dstChainTokenOut.decimals),
-    dstAmountBase: est.dstChainTokenOut.amount,
-    protocolFee: raw.protocolFee ?? '0',
-    fixFeeWei: raw.fixFee ?? '1000000000000000',
-  };
+// ─── Attestation polling ──────────────────────────────────────────────────
 
-  onProgress?.('Switching to Arbitrum...');
-  await switchToArbitrum();
+async function pollAttestation(srcDomain, burnTxHash) {
+  const url = `${ATTESTATION_API}/v2/messages/${srcDomain}?transactionHash=${burnTxHash}`;
+  const start = Date.now();
+  const timeoutMs = 30 * 60 * 1000; // 30 min
 
-  let approveTxHash;
-  let bridgeTxHash;
-  try {
-    onProgress?.('Step 1 of 2 — Approve USDC');
-    const approveData = encodeApprove(raw.tx.to, BigInt(srcAmountBase));
-    approveTxHash = await sendMM({
-      from: senderEvm, to: BRIDGE_SRC_TOKEN, data: approveData,
-    });
+  while (true) {
+    try {
+      const res = await fetch(url);
+      if (res.ok) {
+        const data = await res.json();
+        const msg = data.messages?.[0];
+        if (msg && msg.status === 'complete' && msg.attestation && msg.attestation !== 'PENDING') {
+          return { message: msg.message, attestation: msg.attestation };
+        }
+      }
+    } catch {
+      // network blip — retry
+    }
+    if (Date.now() - start > timeoutMs) {
+      throw new Error('Attestation timed out after 30 minutes.');
+    }
+    await sleep(5000);
+  }
+}
 
-    onProgress?.(`Approval sent (${approveTxHash.slice(0, 10)}...), confirming...`);
-    await waitForReceipt(approveTxHash);
+// ─── High-level orchestrator ──────────────────────────────────────────────
 
-    onProgress?.('Step 2 of 2 — Bridge transaction');
-    bridgeTxHash = await sendMM({
-      from: senderEvm, to: raw.tx.to, data: raw.tx.data,
-      value: raw.tx.value ?? raw.fixFee,
-    });
-  } finally {
-    await switchBackTo(originalChainId);
+/**
+ * Run a CCTP V2 inbound bridge: USDC on `sourceChainId` → native USDC on
+ * Injective EVM. Drives a finite state machine via `onPhase(phase, data)`,
+ * where `phase` is one of:
+ *
+ *   'approve-sign' | 'approve-confirm' | 'burn-sign' | 'burn-confirm' |
+ *   'attest' | 'switch' | 'mint-sign' | 'mint-confirm' | 'success'
+ *
+ * `data` carries phase-relevant fields (txHash, message, attestation, ...).
+ *
+ * The function throws if any step fails — caller surfaces the error and
+ * decides whether to retry. Recovery from a half-completed run (burn ok,
+ * mint pending) is manual — see the widget README.
+ */
+export async function executeBridge({
+  sourceChainId, amountHuman, senderEvm, recipientEvm, onPhase = () => {},
+}) {
+  const src = SOURCE_CHAINS.find((c) => c.id === sourceChainId);
+  if (!src) throw new Error(`Unsupported source chain: ${sourceChainId}`);
+  if (!isAddress(senderEvm) || !isAddress(recipientEvm)) {
+    throw new Error('sender/recipient must be a 0x… EVM address');
   }
 
-  return {
-    approveTxHash,
-    bridgeTxHash,
-    orderId: raw.orderId ?? '',
-    estimation,
-  };
+  const amount = parseUnits(amountHuman, 6);
+  if (amount === 0n) throw new Error('Amount must be > 0');
+
+  const recipientChecksummed = getAddress(recipientEvm);
+  const mintRecipient = pad(recipientChecksummed, { size: 32 });
+  const senderChecksummed = getAddress(senderEvm);
+
+  const srcPublic = publicClient(src);
+  const dstPublic = publicClient(INJECTIVE);
+
+  // 1. Switch wallet to the source chain.
+  await ensureChain(src);
+
+  // 2. Allowance check — skip approve if sufficient.
+  const allowance = await srcPublic.readContract({
+    address: src.usdc,
+    abi: ERC20_ABI,
+    functionName: 'allowance',
+    args: [senderChecksummed, src.cctp.tokenMessenger],
+  });
+
+  let approveHash = null;
+  if (allowance < amount) {
+    onPhase('approve-sign', { src: src.name });
+    approveHash = await walletClient(src).writeContract({
+      account: senderChecksummed,
+      address: src.usdc,
+      abi: ERC20_ABI,
+      functionName: 'approve',
+      args: [src.cctp.tokenMessenger, amount],
+    });
+    onPhase('approve-confirm', { txHash: approveHash, src: src.name });
+    await srcPublic.waitForTransactionReceipt({ hash: approveHash });
+  }
+
+  // 3. Burn on the source chain.
+  onPhase('burn-sign', { src: src.name });
+  const burnHash = await walletClient(src).writeContract({
+    account: senderChecksummed,
+    address: src.cctp.tokenMessenger,
+    abi: TOKEN_MESSENGER_V2_ABI,
+    functionName: 'depositForBurn',
+    args: [
+      amount,
+      INJECTIVE.domain,
+      mintRecipient,
+      src.usdc,
+      ZERO_BYTES32,
+      STANDARD_MAX_FEE,
+      STANDARD_FINALITY,
+    ],
+  });
+  onPhase('burn-confirm', { txHash: burnHash, src: src.name });
+  await srcPublic.waitForTransactionReceipt({ hash: burnHash });
+
+  // 4. Poll Circle for attestation. Can take ~13 min on Ethereum,
+  // ~1 min on Arbitrum/Base/OP/Avalanche, ~5 min on Polygon.
+  onPhase('attest', { srcDomain: src.domain, burnHash });
+  const { message, attestation } = await pollAttestation(src.domain, burnHash);
+
+  // 5. Switch to Injective EVM for the mint.
+  onPhase('switch', { dst: INJECTIVE.name });
+  await ensureChain(INJECTIVE);
+
+  // 6. Mint on Injective EVM (permissionless — anyone can submit).
+  onPhase('mint-sign', { dst: INJECTIVE.name });
+  const mintHash = await walletClient(INJECTIVE).writeContract({
+    account: senderChecksummed,
+    address: INJECTIVE.cctp.messageTransmitter,
+    abi: MESSAGE_TRANSMITTER_V2_ABI,
+    functionName: 'receiveMessage',
+    args: [message, attestation],
+  });
+  onPhase('mint-confirm', { txHash: mintHash, dst: INJECTIVE.name });
+  await dstPublic.waitForTransactionReceipt({ hash: mintHash });
+
+  onPhase('success', { burnHash, mintHash, src: src.name });
+  return { burnHash, mintHash, srcName: src.name, srcExplorer: src.explorer };
 }
