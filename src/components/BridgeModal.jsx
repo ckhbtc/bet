@@ -11,6 +11,7 @@ import {
   FAST_FINALITY,
 } from '../services/bridge';
 import { isPositiveTokenAmount, sanitizeDecimalInput } from '../services/bridgeAmount';
+import { txExplorerUrl } from '../services/explorer';
 import useWalletStore from '../stores/walletStore';
 
 // Human-readable status copy keyed by the phase emitted by executeBridge().
@@ -458,7 +459,7 @@ export default function BridgeModal({ onClose }) {
               </div>
               <div style={{ fontSize: 11, marginTop: 2, opacity: 0.85 }}>
                 mint: <a
-                  href={`https://blockscout.injective.network/tx/${success.mintHash}`}
+                  href={txExplorerUrl(success.mintHash)}
                   target="_blank"
                   rel="noopener noreferrer"
                   style={{ color: 'var(--green)' }}
