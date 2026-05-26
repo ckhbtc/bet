@@ -5,3 +5,14 @@ export const RFQ_CHAIN_ID = 'injective-1';
 export const RFQ_EVM_CHAIN_ID = 1776;
 export const RFQ_COLLECT_QUOTES_MS = 500;
 export const RFQ_REQUEST_TIMEOUT_MS = 15_000;
+export const RFQ_TPSL_SIGNED_INTENT_VERSION = 1;
+export const RFQ_TPSL_SUBACCOUNT_NONCE = 0;
+export const RFQ_TPSL_DEADLINE_MS = 21 * 24 * 60 * 60 * 1000;
+export const RFQ_TPSL_NONCE_WINDOW_MS = 60_000;
+export const RFQ_TPSL_SLIPPAGE = 0.005;
+export const RFQ_TPSL_MIN_FILL_RATIO = 0.1;
+
+export const RFQ_TPSL_TRIGGER = {
+  MARK_PRICE_GTE: 'mark_price_gte',
+  MARK_PRICE_LTE: 'mark_price_lte',
+};
