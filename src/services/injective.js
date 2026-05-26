@@ -8,10 +8,12 @@ import {
   IndexerGrpcOracleApi,
   IndexerGrpcAccountPortfolioApi,
   IndexerRestDerivativesChronosApi,
+  IndexerGrpcRFQApi,
   Address,
 } from '@injectivelabs/sdk-ts';
 import { getNetworkEndpoints, Network } from '@injectivelabs/networks';
 import Decimal from 'decimal.js';
+import { RFQ_TPSL_TRIGGER } from './rfqConstants.js';
 
 const NETWORK = Network.MainnetSentry;
 const endpoints = getNetworkEndpoints(NETWORK);
@@ -19,6 +21,7 @@ const endpoints = getNetworkEndpoints(NETWORK);
 const derivativesApi = new IndexerGrpcDerivativesApi(endpoints.indexer);
 const oracleApi = new IndexerGrpcOracleApi(endpoints.indexer);
 const portfolioApi = new IndexerGrpcAccountPortfolioApi(endpoints.indexer);
+const rfqApi = new IndexerGrpcRFQApi(endpoints.indexer);
 const chronosDerivativesApi = new IndexerRestDerivativesChronosApi(`${endpoints.chronos}/api/chronos/v1/derivative`);
 
 const QUOTE_DECIMALS = 6;
@@ -201,9 +204,10 @@ export async function fetchPositions(injAddress) {
   const markets = await listMarkets();
   const marketMap = new Map(markets.map(m => [m.marketId, m]));
 
-  const [posRes, ordersRes] = await Promise.all([
+  const [posRes, ordersRes, rfqOrdersRes] = await Promise.all([
     derivativesApi.fetchPositionsV2({ address: injAddress }),
     fetchOpenOrders(injAddress).catch(() => ({ orders: [] })),
+    fetchRfqConditionalOrders(injAddress).catch(() => ({ orders: [] })),
   ]);
 
   const SCALE = new Decimal(10).pow(QUOTE_DECIMALS);
@@ -215,8 +219,20 @@ export async function fetchPositions(injAddress) {
     if (!isReduceOnly) continue;
     const orderPrice = new Decimal(o.price).div(SCALE).toNumber();
     const list = tpByMarket.get(o.marketId) || [];
-    list.push({ price: orderPrice, side: o.orderSide, quantity: o.quantity });
+    list.push({ price: orderPrice, side: o.orderSide, quantity: o.quantity, source: 'orderbook' });
     tpByMarket.set(o.marketId, list);
+  }
+  for (const order of rfqOrdersRes.orders || []) {
+    if (order.status && order.status !== 'pending_trigger') continue;
+    const list = tpByMarket.get(order.marketId) || [];
+    list.push({
+      price: new Decimal(order.triggerPrice || '0').toNumber(),
+      triggerType: order.triggerType,
+      direction: order.direction,
+      quantity: order.quantity,
+      source: 'rfq',
+    });
+    tpByMarket.set(order.marketId, list);
   }
 
   const result = [];
@@ -236,10 +252,15 @@ export async function fetchPositions(injAddress) {
     const pnl = markPrice.minus(entryPrice).mul(quantity).mul(dir);
     const pnlPct = margin.gt(0) ? pnl.div(margin).mul(100) : new Decimal(0);
 
-    // TP for a long is a SELL reduce-only above entry; for a short, a BUY below.
+    // RFQ TP for a long triggers above mark, for a short below mark. Older
+    // orderbook TPs are kept as a fallback for positions opened before RFQ TP.
     const candidates = tpByMarket.get(p.marketId) || [];
     const wantedSide = side === 'long' ? 'sell' : 'buy';
-    const tpOrder = candidates.find(c => String(c.side).toLowerCase() === wantedSide);
+    const wantedTrigger = side === 'long'
+      ? RFQ_TPSL_TRIGGER.MARK_PRICE_GTE
+      : RFQ_TPSL_TRIGGER.MARK_PRICE_LTE;
+    const tpOrder = candidates.find(c => c.source === 'rfq' && c.triggerType === wantedTrigger)
+      || candidates.find(c => String(c.side).toLowerCase() === wantedSide);
 
     result.push({
       symbol: market?.symbol || p.marketId.slice(0, 6),
@@ -272,4 +293,8 @@ async function fetchOpenOrders(injAddress) {
   const ethAddress = Address.fromBech32(injAddress).toHex();
   const subaccountId = Address.fromHex(ethAddress).getSubaccountId(0);
   return derivativesApi.fetchOrders({ subaccountId });
+}
+
+async function fetchRfqConditionalOrders(injAddress) {
+  return rfqApi.listConditionalOrders({ requestAddress: injAddress });
 }

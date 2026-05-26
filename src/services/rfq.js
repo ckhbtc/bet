@@ -31,9 +31,12 @@ import {
   cleanupReduceOnlyOrdersForMarket,
   fetchOraclePriceForMarket,
   getMarket,
-  placeTakeProfitOrder,
   requireSession,
 } from './trade.js';
+import {
+  cancelActiveConditionalOrdersForMarket,
+  submitTakeProfitIntent,
+} from './rfqConditional.js';
 
 const GRPC_HEADER_SIZE = 5;
 const GRPC_COMPRESSION_NONE = 0;
@@ -832,20 +835,20 @@ export async function tradeOpenRfq({
 
   if (tpPrice && Number(tpPrice) > 0) {
     try {
-      await placeTakeProfitOrder({
+      const tpResult = await submitTakeProfitIntent({
         session,
         market,
-        isLong: side === 'long',
+        side,
         quantity: input.quantity,
-        tpPrice,
+        triggerPrice: tpPrice,
       });
-      takeProfit = { requested: true, placed: true, error: null };
+      takeProfit = tpResult;
     } catch (err) {
-      console.warn('RFQ TP placement failed (open succeeded):', err.message);
+      console.warn('RFQ conditional TP placement failed (open succeeded):', err.message);
       takeProfit = {
         requested: true,
         placed: false,
-        error: err.message || 'Take-profit placement failed',
+        error: err.message || 'Take-profit intent failed',
       };
     }
   }
@@ -883,6 +886,7 @@ export async function tradeCloseRfq({
     input,
   });
   await cleanupReduceOnlyOrdersForMarket({ session, market });
+  await cancelActiveConditionalOrdersForMarket({ session, marketId: market.marketId });
 
   return {
     ...closeResult,
