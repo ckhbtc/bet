@@ -21,8 +21,8 @@ import {
 } from '@injectivelabs/sdk-ts';
 import { getNetworkEndpoints, Network } from '@injectivelabs/networks';
 import Decimal from 'decimal.js';
-import { getGrantee } from './grantee';
-import { toChainPrice, toChainQty, toChainMargin } from './tradeMath';
+import { getGrantee } from './grantee.js';
+import { toChainPrice, toChainQty, toChainMargin } from './tradeMath.js';
 
 const NETWORK = Network.MainnetSentry;
 const endpoints = getNetworkEndpoints(NETWORK);
@@ -35,7 +35,7 @@ let _marketsCache = null;
 let _marketsCacheTs = 0;
 const MARKETS_TTL_MS = 60_000;
 
-async function getMarket(marketId) {
+export async function getMarket(marketId) {
   if (!_marketsCache || Date.now() - _marketsCacheTs > MARKETS_TTL_MS) {
     const all = await derivativesApi.fetchMarkets({ marketStatus: 'active' });
     _marketsCache = new Map();
@@ -61,7 +61,7 @@ async function getMarket(marketId) {
 
 // ─── Broadcast via AuthZ + fee delegation ──────────────────────────────────
 
-async function broadcastViaAuthz(msgs, session) {
+export async function broadcastViaAuthz(msgs, session) {
   const msgExec = MsgAuthzExec.fromJSON({
     grantee: session.granteeAddress,
     msgs,
@@ -92,10 +92,38 @@ async function broadcastViaAuthz(msgs, session) {
   throw new Error('Broadcast retry budget exhausted');
 }
 
-function requireSession(granterAddress) {
+export function requireSession(granterAddress) {
   const s = getGrantee(granterAddress);
   if (!s) throw new Error('No active session — please re-authorize.');
   return s;
+}
+
+export async function fetchOraclePriceForMarket(market) {
+  const oracleRes = await oracleApi.fetchOraclePrice({
+    baseSymbol: market.oracleBase,
+    quoteSymbol: market.oracleQuote,
+    oracleType: market.oracleType,
+  }).catch(() => null);
+  const oraclePrice = oracleRes?.price ? new Decimal(oracleRes.price) : null;
+  if (!oraclePrice) throw new Error(`Cannot fetch oracle price for ${market.symbol}`);
+  return oraclePrice;
+}
+
+export async function placeTakeProfitOrder({ session, market, isLong, quantity, tpPrice }) {
+  const subaccountId = Address.fromHex(session.ethAddress).getSubaccountId(0);
+  const tpChainPrice = toChainPrice(new Decimal(tpPrice), market.minPriceTickSize);
+  const tpChainQty = toChainQty(new Decimal(quantity), market.minQuantityTickSize);
+  const tpMsg = MsgCreateDerivativeLimitOrder.fromJSON({
+    marketId: market.marketId,
+    subaccountId,
+    injectiveAddress: session.granterAddress,
+    orderType: isLong ? OrderTypeMap.SELL : OrderTypeMap.BUY,
+    price: tpChainPrice,
+    margin: '0',
+    quantity: tpChainQty,
+    feeRecipient: session.granterAddress,
+  });
+  return broadcastViaAuthz([tpMsg], session);
 }
 
 // ─── Open trade (market order) + optional reduce-only TP limit ─────────────
@@ -107,13 +135,7 @@ export async function tradeOpen({
   const market = await getMarket(marketId);
   const isBuy = side === 'long';
 
-  const oracleRes = await oracleApi.fetchOraclePrice({
-    baseSymbol: market.oracleBase,
-    quoteSymbol: market.oracleQuote,
-    oracleType: market.oracleType,
-  }).catch(() => null);
-  const oraclePrice = oracleRes?.price ? new Decimal(oracleRes.price) : null;
-  if (!oraclePrice) throw new Error(`Cannot fetch oracle price for ${market.symbol}`);
+  const oraclePrice = await fetchOraclePriceForMarket(market);
 
   const stake = new Decimal(stakeUsdt);
   const lev = new Decimal(leverage);
@@ -154,18 +176,13 @@ export async function tradeOpen({
   // chain validates the reduce-only against pre-tx state where no position exists.
   if (tpPrice && Number(tpPrice) > 0) {
     try {
-      const tpChainPrice = toChainPrice(new Decimal(tpPrice), market.minPriceTickSize);
-      const tpMsg = MsgCreateDerivativeLimitOrder.fromJSON({
-        marketId: market.marketId,
-        subaccountId,
-        injectiveAddress: session.granterAddress,
-        orderType: isBuy ? OrderTypeMap.SELL : OrderTypeMap.BUY,
-        price: tpChainPrice,
-        margin: '0',
-        quantity: chainQty,
-        feeRecipient: session.granterAddress,
+      await placeTakeProfitOrder({
+        session,
+        market,
+        isLong: isBuy,
+        quantity: qty,
+        tpPrice,
       });
-      await broadcastViaAuthz([tpMsg], session);
       takeProfit = { requested: true, placed: true, error: null };
     } catch (err) {
       console.warn('TP placement failed (open succeeded):', err.message);
