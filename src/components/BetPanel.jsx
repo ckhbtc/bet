@@ -1,6 +1,5 @@
 import { useState, useMemo } from 'react';
 import Sparkline from './Sparkline';
-import RouteToggle from './RouteToggle';
 import { formatPrice, AGGRESSIVENESS, liquidationPrice } from '../data/mockData';
 
 const QUICK_STAKES = [10, 25, 50, 100, 250];
@@ -8,9 +7,7 @@ const QUICK_STAKES = [10, 25, 50, 100, 250];
 export default function BetPanel({
   market,
   balance,
-  venue = 'orderbook',
   rfqReady = true,
-  onVenueChange,
   onConfirm,
   onClose,
 }) {
@@ -71,7 +68,7 @@ export default function BetPanel({
 
   const canPlaceBet = stakeNum >= 1 && winTargetNum >= 1 && stakeNum <= balance
     && !isNaN(targetPrice) && targetPrice > 0 && !unreachable
-    && (venue !== 'rfq' || rfqReady);
+    && rfqReady;
 
   return (
     <div style={{
@@ -146,15 +143,6 @@ export default function BetPanel({
             </button>
           );
         })}
-      </div>
-
-      {/* Route toggle */}
-      <div style={{ marginBottom: 20 }}>
-        <label style={{
-          fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)',
-          textTransform: 'uppercase', letterSpacing: 0.6, display: 'block', marginBottom: 8,
-        }}>Route</label>
-        <RouteToggle value={venue} onChange={onVenueChange} />
       </div>
 
       {/* Stake */}
@@ -295,7 +283,7 @@ export default function BetPanel({
         </div>
       )}
 
-      {venue === 'rfq' && !rfqReady && (
+      {!rfqReady && (
         <div style={{
           background: 'var(--accent-dim)', border: '1px solid var(--accent)',
           borderRadius: 8, padding: '8px 12px', marginBottom: 12,
@@ -323,7 +311,7 @@ export default function BetPanel({
 
       {/* CTA */}
       <button
-        onClick={() => canPlaceBet && onConfirm({ market, direction, stake: stakeNum, winTarget: winTargetNum, aggr, targetPrice, liqPrice, venue })}
+        onClick={() => canPlaceBet && onConfirm({ market, direction, stake: stakeNum, winTarget: winTargetNum, aggr, targetPrice, liqPrice })}
         disabled={!canPlaceBet}
         style={{
           width: '100%',
@@ -338,7 +326,7 @@ export default function BetPanel({
           opacity: canPlaceBet ? 1 : 0.5,
         }}
       >
-        {venue === 'rfq' ? 'Place RFQ Bet →' : 'Place Bet →'}
+        Place Bet →
       </button>
     </div>
   );
