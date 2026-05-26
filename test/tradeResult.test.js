@@ -10,7 +10,8 @@ test('getOpenTradeStatus returns success when open and take-profit both succeed'
     }),
     {
       type: 'success',
-      message: 'Trade placed! Tx: ABCDEF123456...',
+      message: 'Trade placed!',
+      txHash: 'ABCDEF1234567890',
     }
   );
 });
@@ -24,6 +25,7 @@ test('getOpenTradeStatus returns warning when open succeeds but take-profit fail
     {
       type: 'warning',
       message: 'Trade opened, but take-profit failed: reduce-only order rejected',
+      txHash: 'ABCDEF1234567890',
     }
   );
 });
@@ -36,7 +38,8 @@ test('getOpenTradeStatus returns success when no take-profit was requested', () 
     }),
     {
       type: 'success',
-      message: 'Trade placed! Tx: ABCDEF123456...',
+      message: 'Trade placed!',
+      txHash: 'ABCDEF1234567890',
     }
   );
 });
