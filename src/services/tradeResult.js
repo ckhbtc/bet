@@ -9,11 +9,13 @@ export function getOpenTradeStatus(result) {
     return {
       type: 'warning',
       message: `Trade opened, but take-profit failed: ${shortenError(result.takeProfit.error)}`,
+      txHash: result.txHash,
     };
   }
 
   return {
     type: 'success',
-    message: `Trade placed! Tx: ${result.txHash.slice(0, 12)}...`,
+    message: 'Trade placed!',
+    txHash: result.txHash,
   };
 }
