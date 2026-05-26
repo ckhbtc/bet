@@ -19,7 +19,12 @@ import {
 } from '@injectivelabs/sdk-ts';
 import { getNetworkEndpoints, getNetworkChainInfo, Network } from '@injectivelabs/networks';
 import { ethers } from 'ethers';
-import { buildGrantMessages, buildRevokeMessages, GRANT_EXPIRATION_S } from './authzMessages';
+import {
+  AUTHZ_SCOPE_VERSION,
+  buildGrantMessages,
+  buildRevokeMessages,
+  GRANT_EXPIRATION_S,
+} from './authzMessages.js';
 
 const NETWORK = Network.MainnetSentry;
 const endpoints = getNetworkEndpoints(NETWORK);
@@ -189,17 +194,19 @@ export async function grantAuthZ(injAddress, onProgress) {
     injectiveAddress: ephemeralAddress,
     expiration,
     evmChainId,
+    scopeVersion: AUTHZ_SCOPE_VERSION,
     txHash,
   };
 }
 
-export async function revokeAuthZ({ injAddress, granteeAddress }, onProgress) {
+export async function revokeAuthZ({ injAddress, granteeAddress, includeRfq = true }, onProgress) {
   if (!granteeAddress) throw new Error('No autosign grantee found to revoke');
 
   onProgress?.('Preparing AuthZ revoke...');
   const msgRevokes = buildRevokeMessages({
     granter: injAddress,
     grantee: granteeAddress,
+    includeRfq,
   });
 
   const { txHash, evmChainId } = await signAndBroadcastEip712({
