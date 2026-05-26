@@ -120,7 +120,7 @@ export default function ConfirmSheet({ bet, onConfirm, onEdit }) {
 
           {/* Target + style row */}
           <div style={{
-            display: 'grid', gridTemplateColumns: '1fr auto',
+            display: 'grid', gridTemplateColumns: '1fr auto auto',
             gap: 10, marginBottom: 16,
           }}>
             <div style={{
@@ -151,6 +151,21 @@ export default function ConfirmSheet({ bet, onConfirm, onEdit }) {
                 fontSize: 14, fontWeight: 700,
                 fontFamily: 'var(--font-heading)', color: aggrConfig.color,
               }}>{aggrConfig.label}</div>
+            </div>
+            <div style={{
+              background: 'var(--bg-primary)', border: '1px solid var(--border)',
+              borderRadius: 10, padding: '10px 14px',
+              display: 'flex', flexDirection: 'column', justifyContent: 'center',
+              minWidth: 78,
+            }}>
+              <div style={{
+                fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)',
+                textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 2,
+              }}>Route</div>
+              <div style={{
+                fontSize: 14, fontWeight: 700,
+                fontFamily: 'var(--font-heading)', color: 'var(--text-primary)',
+              }}>{bet.venue === 'rfq' ? 'RFQ' : 'Book'}</div>
             </div>
           </div>
 
