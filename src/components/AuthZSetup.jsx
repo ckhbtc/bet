@@ -36,7 +36,7 @@ export default function AuthZSetup() {
         padding: 0, margin: '0 0 20px 0', listStyle: 'none',
       }}>
         <li>· Funds stay in your wallet</li>
-        <li>· Permission limited to derivative trading messages</li>
+        <li>· Permission limited to derivative trading and RFQ settlement messages</li>
         <li>· Revoke anytime</li>
         <li>· Gas-free trading</li>
         <li>· Authorized key stored only on this device</li>
