@@ -1,10 +1,19 @@
 import { useState, useMemo } from 'react';
 import Sparkline from './Sparkline';
+import RouteToggle from './RouteToggle';
 import { formatPrice, AGGRESSIVENESS, liquidationPrice } from '../data/mockData';
 
 const QUICK_STAKES = [10, 25, 50, 100, 250];
 
-export default function BetPanel({ market, balance, onConfirm, onClose }) {
+export default function BetPanel({
+  market,
+  balance,
+  venue = 'orderbook',
+  rfqReady = true,
+  onVenueChange,
+  onConfirm,
+  onClose,
+}) {
   const [direction, setDirection] = useState('up');
   // Kept as strings so the input can be truly empty while typing;
   // numeric operations use the *Num derived values below.
@@ -61,7 +70,8 @@ export default function BetPanel({ market, balance, onConfirm, onClose }) {
   const unreachable = direction === 'down' ? requiredMove >= 1 : false;
 
   const canPlaceBet = stakeNum >= 1 && winTargetNum >= 1 && stakeNum <= balance
-    && !isNaN(targetPrice) && targetPrice > 0 && !unreachable;
+    && !isNaN(targetPrice) && targetPrice > 0 && !unreachable
+    && (venue !== 'rfq' || rfqReady);
 
   return (
     <div style={{
@@ -136,6 +146,15 @@ export default function BetPanel({ market, balance, onConfirm, onClose }) {
             </button>
           );
         })}
+      </div>
+
+      {/* Route toggle */}
+      <div style={{ marginBottom: 20 }}>
+        <label style={{
+          fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)',
+          textTransform: 'uppercase', letterSpacing: 0.6, display: 'block', marginBottom: 8,
+        }}>Route</label>
+        <RouteToggle value={venue} onChange={onVenueChange} />
       </div>
 
       {/* Stake */}
@@ -276,6 +295,16 @@ export default function BetPanel({ market, balance, onConfirm, onClose }) {
         </div>
       )}
 
+      {venue === 'rfq' && !rfqReady && (
+        <div style={{
+          background: 'var(--accent-dim)', border: '1px solid var(--accent)',
+          borderRadius: 8, padding: '8px 12px', marginBottom: 12,
+          fontSize: 12, color: 'var(--accent)', textAlign: 'center', lineHeight: 1.5,
+        }}>
+          RFQ needs updated autosign permissions. Revoke autosign, then authorize again.
+        </div>
+      )}
+
       {/* Risk line */}
       {!unreachable && (
         <div style={{
@@ -294,7 +323,7 @@ export default function BetPanel({ market, balance, onConfirm, onClose }) {
 
       {/* CTA */}
       <button
-        onClick={() => canPlaceBet && onConfirm({ market, direction, stake: stakeNum, winTarget: winTargetNum, aggr, targetPrice, liqPrice })}
+        onClick={() => canPlaceBet && onConfirm({ market, direction, stake: stakeNum, winTarget: winTargetNum, aggr, targetPrice, liqPrice, venue })}
         disabled={!canPlaceBet}
         style={{
           width: '100%',
@@ -309,7 +338,7 @@ export default function BetPanel({ market, balance, onConfirm, onClose }) {
           opacity: canPlaceBet ? 1 : 0.5,
         }}
       >
-        Place Bet →
+        {venue === 'rfq' ? 'Place RFQ Bet →' : 'Place Bet →'}
       </button>
     </div>
   );
