@@ -63,6 +63,32 @@ test('buildTpSlConditionalOrder builds a short take-profit signed intent body', 
   assert.equal(order.margin, '0');
 });
 
+test('buildTpSlConditionalOrder builds stop-loss trigger direction', () => {
+  const longStop = buildTpSlConditionalOrder({
+    market,
+    side: 'long',
+    quantity: '5',
+    triggerPrice: '95',
+    kind: 'stop_loss',
+    slippage: 0.005,
+    rfqId: 125,
+  });
+  const shortStop = buildTpSlConditionalOrder({
+    market,
+    side: 'short',
+    quantity: '5',
+    triggerPrice: '105',
+    kind: 'stop_loss',
+    slippage: 0.005,
+    rfqId: 126,
+  });
+
+  assert.equal(longStop.direction, 'short');
+  assert.equal(longStop.triggerType, RFQ_TPSL_TRIGGER.MARK_PRICE_LTE);
+  assert.equal(shortStop.direction, 'long');
+  assert.equal(shortStop.triggerType, RFQ_TPSL_TRIGGER.MARK_PRICE_GTE);
+});
+
 test('buildSignedTakerIntentTypedData matches RFQ conditional order EIP-712 shape', () => {
   const typedData = buildSignedTakerIntentTypedData({
     cid: 'cid-1',
