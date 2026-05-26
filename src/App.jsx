@@ -6,9 +6,14 @@ const readInitialTheme = () => {
   const attr = document.documentElement.dataset.theme;
   return THEMES.includes(attr) ? attr : 'bauhaus';
 };
+const readInitialTradeVenue = () => {
+  if (typeof localStorage === 'undefined') return 'orderbook';
+  return localStorage.getItem('bet-trade-venue') === 'rfq' ? 'rfq' : 'orderbook';
+};
 import TopBar from './components/TopBar';
 import MarketCard from './components/MarketCard';
 import BetPanel from './components/BetPanel';
+import RouteToggle from './components/RouteToggle';
 import ConfirmSheet from './components/ConfirmSheet';
 import ActiveBets from './components/ActiveBets';
 import BetResult from './components/BetResult';
@@ -17,6 +22,8 @@ import BridgeModal from './components/BridgeModal';
 import Confetti from './components/Confetti';
 import { AGGRESSIVENESS } from './data/mockData';
 import { tradeOpen, tradeClose } from './services/trade';
+import { tradeOpenRfq } from './services/rfq';
+import { shortTxHash, txExplorerUrl } from './services/explorer';
 import { getOpenTradeStatus } from './services/tradeResult';
 import useWalletStore from './stores/walletStore';
 import useMarketStore from './stores/marketStore';
@@ -27,10 +34,11 @@ export default function App() {
   const [selectedMarket, setSelectedMarket] = useState(null);
   const [pendingBet, setPendingBet] = useState(null);
   const [showResult, setShowResult] = useState(null);
-  const [txStatus, setTxStatus] = useState(null); // { type: 'loading'|'success'|'error', message }
+  const [txStatus, setTxStatus] = useState(null); // { type: 'loading'|'success'|'warning'|'error', message, txHash? }
   const [confetti, setConfetti] = useState(false);
   const [showBridge, setShowBridge] = useState(false);
   const [theme, setTheme] = useState(readInitialTheme);
+  const [tradeVenue, setTradeVenue] = useState(readInitialTradeVenue);
   const [devMode, setDevMode] = useState(() => {
     if (typeof localStorage === 'undefined') return false;
     return localStorage.getItem('bet-dev-mode') === '1';
@@ -42,8 +50,16 @@ export default function App() {
     try { localStorage.setItem('bet-theme', theme); } catch { /* ignore */ }
   }, [theme]);
 
+  useEffect(() => {
+    try { localStorage.setItem('bet-trade-venue', tradeVenue); } catch { /* ignore */ }
+  }, [tradeVenue]);
+
   const setThemeTo = useCallback((next) => {
     if (THEMES.includes(next)) setTheme(next);
+  }, []);
+
+  const setTradeVenueTo = useCallback((next) => {
+    if (next === 'orderbook' || next === 'rfq') setTradeVenue(next);
   }, []);
 
   // D-E-V keystroke (sequence within ~1.5s, ignored while typing in form fields) toggles devMode.
@@ -107,11 +123,16 @@ export default function App() {
 
     const aggrConfig = AGGRESSIVENESS[pendingBet.aggr];
 
-    setTxStatus({ type: 'loading', message: 'Placing trade...' });
+    const venue = pendingBet.venue || 'orderbook';
+    setTxStatus({
+      type: 'loading',
+      message: venue === 'rfq' ? 'Requesting RFQ quotes...' : 'Placing trade...',
+    });
     setPendingBet(null);
 
     try {
-      const result = await tradeOpen({
+      const openTrade = venue === 'rfq' ? tradeOpenRfq : tradeOpen;
+      const result = await openTrade({
         granterAddress: injAddress,
         marketId: pendingBet.market.marketId,
         side: pendingBet.direction === 'up' ? 'long' : 'short',
@@ -152,7 +173,11 @@ export default function App() {
         quantity: position.quantity,
       });
 
-      setTxStatus({ type: 'success', message: `Position closed! Tx: ${result.txHash.slice(0, 12)}...` });
+      setTxStatus({
+        type: 'success',
+        message: 'Position closed!',
+        txHash: result.txHash,
+      });
 
       refreshBalances();
       useMarketStore.getState().fetchPositions(useWalletStore.getState().injAddress);
@@ -208,8 +233,9 @@ export default function App() {
       setTxStatus({
         type: 'success',
         message: result.txHash
-          ? `Autosign revoked. Tx: ${result.txHash.slice(0, 12)}...`
+          ? 'Autosign revoked.'
           : 'Autosign cleared.',
+        txHash: result.txHash || null,
       });
       clearTxStatusSoon();
     } catch (err) {
@@ -256,6 +282,25 @@ export default function App() {
           maxWidth: 400,
         }}>
           {txStatus.type === 'loading' && '⏳ '}{txStatus.type === 'warning' && '! '}{txStatus.message}
+          {txStatus.txHash && (
+            <>
+              {' '}
+              <a
+                href={txExplorerUrl(txStatus.txHash)}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={txStatus.txHash}
+                aria-label={`View transaction ${txStatus.txHash} on explorer`}
+                style={{
+                  color: 'inherit',
+                  textDecoration: 'underline',
+                  textUnderlineOffset: 3,
+                }}
+              >
+                Tx: {shortTxHash(txStatus.txHash)}
+              </a>
+            </>
+          )}
         </div>
       )}
 
@@ -274,10 +319,35 @@ export default function App() {
           {view === 'home' && !selectedMarket && (
             <>
               <div style={{ marginBottom: 24 }}>
-                <h1 style={{ fontSize: 32, fontWeight: 700, letterSpacing: -1, marginBottom: 6 }}>Markets</h1>
-                <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>
-                  {loading ? 'Loading markets...' : connected ? 'Pick an asset and place your bet' : 'Connect wallet to start trading'}
-                </p>
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'flex-start',
+                  gap: 16,
+                  flexWrap: 'wrap',
+                }}>
+                  <div>
+                    <h1 style={{ fontSize: 32, fontWeight: 700, letterSpacing: -1, marginBottom: 6 }}>Markets</h1>
+                    <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>
+                      {loading ? 'Loading markets...' : connected ? 'Pick an asset and place your bet' : 'Connect wallet to start trading'}
+                    </p>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6, alignItems: 'flex-end' }}>
+                    <div style={{
+                      fontSize: 10,
+                      fontFamily: 'var(--font-mono)',
+                      color: 'var(--text-muted)',
+                      textTransform: 'uppercase',
+                      letterSpacing: 1.4,
+                    }}>Route</div>
+                    <RouteToggle value={tradeVenue} onChange={setTradeVenueTo} compact />
+                    {tradeVenue === 'rfq' && connected && session.active && !session.rfqReady && (
+                      <div style={{ fontSize: 11, color: 'var(--accent)', maxWidth: 220, textAlign: 'right' }}>
+                        Re-authorize autosign to place RFQ bets.
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
               <div style={{
                 display: 'grid',
@@ -325,6 +395,9 @@ export default function App() {
                 <BetPanel
                   market={selectedMarket}
                   balance={usdcBalance}
+                  venue={tradeVenue}
+                  rfqReady={session.rfqReady}
+                  onVenueChange={setTradeVenueTo}
                   onConfirm={handleBetConfirm}
                   onClose={() => setSelectedMarket(null)}
                 />
