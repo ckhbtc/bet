@@ -226,6 +226,55 @@ test('signPreparedAutoSignTxRaw signs the autosign slot and preserves fee payer 
   assert.deepEqual([...signedTxRaw.signatures[1]], [...signatureHexToBytes(feePayerSig)]);
 });
 
+test('signPreparedAutoSignTxRaw matches protobuf Any pubkeys when fee payer is first', async () => {
+  const autosignKey = PrivateKey.fromHex('0x' + '03'.repeat(32));
+  const feePayerKey = PrivateKey.fromHex('0x' + '04'.repeat(32));
+  const authInfo = CosmosTxV1Beta1TxPb.AuthInfo.create({
+    signerInfos: [
+      {
+        publicKey: feePayerKey.toPublicKey().toAny(),
+        sequence: 8n,
+      },
+      {
+        publicKey: autosignKey.toPublicKey().toAny(),
+        sequence: 9n,
+      },
+    ],
+  });
+  const txRaw = CosmosTxV1Beta1TxPb.TxRaw.create({
+    bodyBytes: new Uint8Array([4, 5, 6]),
+    authInfoBytes: CosmosTxV1Beta1TxPb.AuthInfo.toBinary(authInfo),
+    signatures: [],
+  });
+  const feePayerSig = '0x' + 'cd'.repeat(64);
+
+  const indexes = getPreparedTxSignatureIndexes(txRaw, {
+    autosignPubKeyBase64: autosignKey.toPublicKey().toBase64(),
+    feePayerPubKeyBase64: feePayerKey.toPublicKey().toBase64(),
+  });
+  assert.deepEqual(indexes, {
+    autosignIndex: 1,
+    feePayerIndex: 0,
+    signerCount: 2,
+  });
+
+  const signedTxRaw = await signPreparedAutoSignTxRaw({
+    tx: CosmosTxV1Beta1TxPb.TxRaw.toBinary(txRaw),
+    feePayerSig,
+    privateKeyHex: autosignKey.toPrivateKeyHex(),
+    accountNumber: 123,
+    feePayerPubKey: {
+      type: '/injective.crypto.v1beta1.ethsecp256k1.PubKey',
+      key: feePayerKey.toPublicKey().toBase64(),
+    },
+    chainId: RFQ_CHAIN_ID,
+  });
+
+  assert.equal(signedTxRaw.signatures.length, 2);
+  assert.deepEqual([...signedTxRaw.signatures[0]], [...signatureHexToBytes(feePayerSig)]);
+  assert.ok(signedTxRaw.signatures[1].length > 0);
+});
+
 test('selectRfqQuotesForAccept filters wrong contract and sorts by best long price', () => {
   const selected = selectRfqQuotesForAccept([
     quote({ price: '100.5' }),

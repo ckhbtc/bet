@@ -71,9 +71,62 @@ function base64ToHex(base64) {
   return uint8ArrayToHex(base64ToUint8Array(base64));
 }
 
+function bytesToBase64(bytes) {
+  if (typeof btoa === 'function') {
+    let binary = '';
+    for (const byte of bytes) binary += String.fromCharCode(byte);
+    return btoa(binary);
+  }
+  return Buffer.from(bytes).toString('base64');
+}
+
+function extractRawPubKeyBytes(value) {
+  const bytes = value instanceof Uint8Array ? value : new Uint8Array(value || []);
+  if (!bytes.length) return bytes;
+
+  if (bytes.length === 33 && (bytes[0] === 2 || bytes[0] === 3)) return bytes;
+  if (bytes[0] !== 0x0a) return bytes;
+
+  let length = 0;
+  let shift = 0;
+  let offset = 1;
+  while (offset < bytes.length) {
+    const byte = bytes[offset++];
+    length += (byte & 0x7f) * (2 ** shift);
+    if ((byte & 0x80) === 0) break;
+    shift += 7;
+  }
+
+  if (length > 0 && offset + length <= bytes.length) {
+    return bytes.slice(offset, offset + length);
+  }
+  return bytes;
+}
+
+function pubKeyBytesToBase64(value) {
+  return bytesToBase64(extractRawPubKeyBytes(value));
+}
+
+function pubKeyInputToBase64(value) {
+  if (!value) return '';
+  if (value instanceof Uint8Array || Array.isArray(value)) return pubKeyBytesToBase64(value);
+
+  const text = String(value).trim();
+  const cleanHex = text.replace(/^0x/i, '');
+  if (/^[0-9a-f]+$/i.test(cleanHex) && (cleanHex.length === 66 || cleanHex.length === 70)) {
+    return pubKeyBytesToBase64(signatureHexToBytes(cleanHex));
+  }
+
+  try {
+    return pubKeyBytesToBase64(base64ToUint8Array(text));
+  } catch {
+    return text;
+  }
+}
+
 function getSignerPubKeyBase64(signerInfo) {
   const value = signerInfo?.publicKey?.value;
-  return value?.length ? uint8ArrayToBase64(value) : '';
+  return value?.length ? pubKeyBytesToBase64(value) : '';
 }
 
 async function fetchAccountDetailsNoThrow(address) {
@@ -645,17 +698,37 @@ export function getPreparedTxSignatureIndexes(txRaw, {
 }) {
   const authInfo = CosmosTxV1Beta1TxPb.AuthInfo.fromBinary(txRaw.authInfoBytes);
   const signerInfos = authInfo.signerInfos || [];
+  if (!signerInfos.length) {
+    throw new Error('RFQ gateway prepared a transaction without signer info');
+  }
+
+  const autosignPubKey = pubKeyInputToBase64(autosignPubKeyBase64);
+  const feePayerPubKey = pubKeyInputToBase64(feePayerPubKeyBase64);
   const autosignIndex = signerInfos.findIndex((signerInfo) => (
-    getSignerPubKeyBase64(signerInfo) === autosignPubKeyBase64
+    getSignerPubKeyBase64(signerInfo) === autosignPubKey
   ));
-  const feePayerIndex = signerInfos.findIndex((signerInfo) => (
-    feePayerPubKeyBase64 && getSignerPubKeyBase64(signerInfo) === feePayerPubKeyBase64
+  let feePayerIndex = signerInfos.findIndex((signerInfo) => (
+    feePayerPubKey && getSignerPubKeyBase64(signerInfo) === feePayerPubKey
   ));
 
+  if (autosignIndex < 0) {
+    throw new Error('RFQ gateway prepared a transaction without the autosign signer');
+  }
+
+  if (feePayerIndex < 0) {
+    feePayerIndex = signerInfos.findIndex((_, index) => index !== autosignIndex);
+  }
+  if (feePayerIndex < 0) {
+    throw new Error('RFQ gateway prepared a transaction without the fee payer signer');
+  }
+  if (feePayerIndex === autosignIndex && signerInfos.length > 1) {
+    throw new Error('RFQ gateway prepared ambiguous signer indexes');
+  }
+
   return {
-    autosignIndex: autosignIndex >= 0 ? autosignIndex : 0,
-    feePayerIndex: feePayerIndex >= 0 ? feePayerIndex : (autosignIndex === 0 ? 1 : 0),
-    signerCount: signerInfos.length || 2,
+    autosignIndex,
+    feePayerIndex,
+    signerCount: signerInfos.length,
   };
 }
 
