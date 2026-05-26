@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { grantAuthZ, revokeAuthZ } from '../services/autosign';
 import { getGrantee, setGrantee, clearGrantee } from '../services/grantee';
 import { api } from '../services/api';
+import { AUTHZ_SCOPE_VERSION } from '../services/authzMessages';
 
 /**
  * Session = "is there a non-expired grantee key stored locally for the
@@ -11,6 +12,7 @@ import { api } from '../services/api';
  */
 const useSessionStore = create((set) => ({
   active: false,
+  rfqReady: false,
   expiration: null,
   granterAddress: null,
   granting: false,
@@ -20,15 +22,20 @@ const useSessionStore = create((set) => ({
 
   refresh: (expectedInjAddress = null) => {
     if (!expectedInjAddress) {
-      set({ active: false, expiration: null, granterAddress: null });
+      set({ active: false, rfqReady: false, expiration: null, granterAddress: null });
       return;
     }
     const entry = getGrantee(expectedInjAddress);
     if (!entry) {
-      set({ active: false, expiration: null, granterAddress: null });
+      set({ active: false, rfqReady: false, expiration: null, granterAddress: null });
       return;
     }
-    set({ active: true, expiration: entry.expiration, granterAddress: entry.granterAddress });
+    set({
+      active: true,
+      rfqReady: Number(entry.scopeVersion || 1) >= AUTHZ_SCOPE_VERSION,
+      expiration: entry.expiration,
+      granterAddress: entry.granterAddress,
+    });
   },
 
   grant: async ({ injAddress, ethAddress }) => {
@@ -43,9 +50,11 @@ const useSessionStore = create((set) => ({
         ethAddress,
         evmChainId: result.evmChainId,
         expiration: result.expiration,
+        scopeVersion: result.scopeVersion,
       });
       set({
         active: true,
+        rfqReady: true,
         expiration: result.expiration,
         granterAddress: injAddress,
         granting: false,
@@ -81,13 +90,13 @@ const useSessionStore = create((set) => ({
 
   revoke: async (granterAddress) => {
     if (!granterAddress) {
-      set({ active: false, expiration: null, granterAddress: null, revoking: false, status: '' });
+      set({ active: false, rfqReady: false, expiration: null, granterAddress: null, revoking: false, status: '' });
       return { txHash: null, localOnly: true };
     }
 
     const entry = getGrantee(granterAddress);
     if (!entry) {
-      set({ active: false, expiration: null, granterAddress: null, revoking: false, status: '' });
+      set({ active: false, rfqReady: false, expiration: null, granterAddress: null, revoking: false, status: '' });
       return { txHash: null, localOnly: true };
     }
 
@@ -97,6 +106,7 @@ const useSessionStore = create((set) => ({
       result = await revokeAuthZ({
         injAddress: granterAddress,
         granteeAddress: entry.granteeAddress,
+        includeRfq: Number(entry.scopeVersion || 1) >= AUTHZ_SCOPE_VERSION,
       }, (msg) => set({ status: msg }));
     } catch (err) {
       set({ revoking: false, error: err.message, status: '' });
@@ -109,6 +119,7 @@ const useSessionStore = create((set) => ({
     try { clearGrantee(granterAddress); } catch { /* best-effort */ }
     set({
       active: false,
+      rfqReady: false,
       expiration: null,
       granterAddress: null,
       revoking: false,
@@ -119,7 +130,7 @@ const useSessionStore = create((set) => ({
 
   deactivate: (granterAddress) => {
     if (granterAddress) clearGrantee(granterAddress);
-    set({ active: false, expiration: null, granterAddress: null, revoking: false, status: '' });
+    set({ active: false, rfqReady: false, expiration: null, granterAddress: null, revoking: false, status: '' });
   },
 }));
 
