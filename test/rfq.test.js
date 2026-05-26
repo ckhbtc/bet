@@ -8,6 +8,7 @@ import {
 } from '@injectivelabs/sdk-ts';
 import {
   buildAcceptQuoteMessage,
+  buildRfqCloseInput,
   buildRfqGatewayPrepareRequest,
   buildRfqQuoteResult,
   buildRfqOrderInput,
@@ -72,6 +73,40 @@ test('buildRfqOrderInput formats human RFQ decimals from market ticks', () => {
     margin: '50',
     quantity: '5',
     worstPrice: '101',
+  });
+});
+
+test('buildRfqCloseInput closes longs with a zero-margin short RFQ', () => {
+  const input = buildRfqCloseInput({
+    market,
+    oraclePrice: '100',
+    side: 'long',
+    quantity: '5.4321',
+    slippage: 0.02,
+  });
+
+  assert.deepEqual(input, {
+    direction: 'short',
+    margin: '0',
+    quantity: '5.432',
+    worstPrice: '98',
+  });
+});
+
+test('buildRfqCloseInput closes shorts with a zero-margin long RFQ', () => {
+  const input = buildRfqCloseInput({
+    market,
+    oraclePrice: '100',
+    side: 'short',
+    quantity: '5.4321',
+    slippage: 0.02,
+  });
+
+  assert.deepEqual(input, {
+    direction: 'long',
+    margin: '0',
+    quantity: '5.432',
+    worstPrice: '102',
   });
 });
 
