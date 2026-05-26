@@ -28,6 +28,7 @@ import {
 } from './rfqConstants.js';
 import { AUTHZ_SCOPE_VERSION } from './authzMessages.js';
 import {
+  cleanupReduceOnlyOrdersForMarket,
   fetchOraclePriceForMarket,
   getMarket,
   placeTakeProfitOrder,
@@ -774,6 +775,33 @@ export function buildRfqOrderInput({ market, oraclePrice, side, stakeUsdt, lever
   };
 }
 
+export function buildRfqCloseInput({ market, oraclePrice, side, quantity, slippage = 0.02 }) {
+  const direction = side === 'long' ? 'short' : 'long';
+  const price = new Decimal(oraclePrice);
+  const closeQty = quantizeDecimal(
+    quantity,
+    market.minQuantityTickSize,
+    Decimal.ROUND_FLOOR
+  );
+  if (new Decimal(closeQty).lte(0)) throw new Error('Quantity rounds to zero - try a larger size');
+
+  const worstRaw = direction === 'long'
+    ? price.mul(new Decimal(1).plus(slippage))
+    : price.mul(new Decimal(1).minus(slippage));
+  const worstPrice = quantizeDecimal(
+    worstRaw,
+    humanPriceTick(market.minPriceTickSize),
+    direction === 'long' ? Decimal.ROUND_CEIL : Decimal.ROUND_FLOOR
+  );
+
+  return {
+    direction,
+    margin: '0',
+    quantity: closeQty,
+    worstPrice,
+  };
+}
+
 export async function tradeOpenRfq({
   granterAddress,
   marketId,
@@ -830,6 +858,40 @@ export async function tradeOpenRfq({
       quotesAccepted: openResult.prepared.quotes?.length ?? 0,
       bestPrice: openResult.prepared.quotes?.[0]?.price ?? null,
       quotesWaitMs: openResult.prepared.quotesWaitMs,
+    },
+  };
+}
+
+export async function tradeCloseRfq({
+  granterAddress,
+  marketId,
+  side,
+  quantity,
+  slippage = 0.02,
+}) {
+  const session = requireSession(granterAddress);
+  if (Number(session.scopeVersion || 1) < AUTHZ_SCOPE_VERSION) {
+    throw new Error('RFQ needs updated autosign permissions. Revoke autosign, then authorize again to add the RFQ contract grants.');
+  }
+
+  const market = await getMarket(marketId);
+  const oraclePrice = await fetchOraclePriceForMarket(market);
+  const input = buildRfqCloseInput({ market, oraclePrice, side, quantity, slippage });
+  const closeResult = await executeRfqGatewayAutoSign({
+    session,
+    marketId: market.marketId,
+    input,
+  });
+  await cleanupReduceOnlyOrdersForMarket({ session, market });
+
+  return {
+    ...closeResult,
+    rfq: {
+      rfqId: closeResult.prepared.rfqId,
+      quotesAccepted: closeResult.prepared.quotes?.length ?? 0,
+      bestPrice: closeResult.prepared.quotes?.[0]?.price ?? null,
+      quotesWaitMs: closeResult.prepared.quotesWaitMs,
+      reduceOnly: true,
     },
   };
 }

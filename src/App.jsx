@@ -16,8 +16,7 @@ import AuthZSetup from './components/AuthZSetup';
 import BridgeModal from './components/BridgeModal';
 import Confetti from './components/Confetti';
 import { AGGRESSIVENESS } from './data/mockData';
-import { tradeClose } from './services/trade';
-import { tradeOpenRfq } from './services/rfq';
+import { tradeCloseRfq, tradeOpenRfq } from './services/rfq';
 import { shortTxHash, txExplorerUrl } from './services/explorer';
 import { getOpenTradeStatus } from './services/tradeResult';
 import useWalletStore from './stores/walletStore';
@@ -147,10 +146,10 @@ export default function App() {
   const handleCashOut = useCallback(async (position) => {
     if (!connected || !position.market) return;
 
-    setTxStatus({ type: 'loading', message: 'Closing position...' });
+    setTxStatus({ type: 'loading', message: 'Requesting RFQ cash-out quote...' });
 
     try {
-      const result = await tradeClose({
+      const result = await tradeCloseRfq({
         granterAddress: injAddress,
         marketId: position.marketId,
         side: position.side,
@@ -183,9 +182,9 @@ export default function App() {
     let fail = 0;
     for (let i = 0; i < list.length; i++) {
       const pos = list[i];
-      setTxStatus({ type: 'loading', message: `Closing ${i + 1}/${list.length}: ${pos.asset}...` });
+      setTxStatus({ type: 'loading', message: `RFQ cash out ${i + 1}/${list.length}: ${pos.asset}...` });
       try {
-        await tradeClose({
+        await tradeCloseRfq({
           granterAddress: injAddress,
           marketId: pos.marketId,
           side: pos.side,
