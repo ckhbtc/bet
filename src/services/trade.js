@@ -126,6 +126,31 @@ export async function placeTakeProfitOrder({ session, market, isLong, quantity, 
   return broadcastViaAuthz([tpMsg], session);
 }
 
+export async function cleanupReduceOnlyOrdersForMarket({ session, market }) {
+  const subaccountId = Address.fromHex(session.ethAddress).getSubaccountId(0);
+
+  try {
+    const { orders } = await derivativesApi.fetchOrders({ subaccountId, marketId: market.marketId });
+    for (const o of orders || []) {
+      const isReduceOnly = String(o.margin || '0') === '0';
+      if (!isReduceOnly || !o.orderHash) continue;
+      const cancelMsg = MsgCancelDerivativeOrder.fromJSON({
+        injectiveAddress: session.granterAddress,
+        marketId: market.marketId,
+        subaccountId,
+        orderHash: o.orderHash,
+      });
+      try {
+        await broadcastViaAuthz([cancelMsg], session);
+      } catch (err) {
+        console.warn('cancel failed for', o.orderHash, '-', err.message);
+      }
+    }
+  } catch (err) {
+    console.warn('order lookup for cancel failed:', err.message);
+  }
+}
+
 // ─── Open trade (market order) + optional reduce-only TP limit ─────────────
 
 export async function tradeOpen({
@@ -239,26 +264,7 @@ export async function tradeClose({
 
   // Best-effort cleanup of orphaned reduce-only TPs in a separate tx — bundling
   // would atomically fail the close if the cancel hits a stale order hash.
-  try {
-    const { orders } = await derivativesApi.fetchOrders({ subaccountId, marketId: market.marketId });
-    for (const o of orders || []) {
-      const isReduceOnly = String(o.margin || '0') === '0';
-      if (!isReduceOnly || !o.orderHash) continue;
-      const cancelMsg = MsgCancelDerivativeOrder.fromJSON({
-        injectiveAddress: session.granterAddress,
-        marketId: market.marketId,
-        subaccountId,
-        orderHash: o.orderHash,
-      });
-      try {
-        await broadcastViaAuthz([cancelMsg], session);
-      } catch (err) {
-        console.warn('cancel failed for', o.orderHash, '-', err.message);
-      }
-    }
-  } catch (err) {
-    console.warn('order lookup for cancel failed:', err.message);
-  }
+  await cleanupReduceOnlyOrdersForMarket({ session, market });
 
   return closeResult;
 }
