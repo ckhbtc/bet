@@ -26,6 +26,8 @@ const chronosDerivativesApi = new IndexerRestDerivativesChronosApi(`${endpoints.
 
 const QUOTE_DECIMALS = 6;
 const INJ_DECIMALS = 18;
+const USDC_QUOTE_DENOM = 'erc20:0xa00c59ff5a080d2b954d0c75e46e22a0c371235a';
+const BFF_DERIVATIVE_MARKETS_URL = 'https://bff-api.injective.network/api/v1/derivative/markets/tc?network=mainnet&marketStatus=active';
 
 // ─── Token registry ──────────────────────────────────────────────────────────
 //
@@ -61,6 +63,8 @@ function resolveDenom(denom) {
 
 let _marketsCache = null;
 let _marketsCacheTs = 0;
+let _verifiedBffMarketsCache = null;
+let _verifiedBffMarketsCacheTs = 0;
 const CACHE_TTL_MS = 60_000;
 
 export async function listMarkets() {
@@ -87,6 +91,7 @@ export async function listMarkets() {
       symbol: symbolFromTicker || oracleBase,
       ticker,
       marketId: String(m.marketId || ''),
+      quoteDenom: String(m.quoteDenom || ''),
       minPriceTickSize: String(m.minPriceTickSize || '0.001'),
       minQuantityTickSize: String(m.minQuantityTickSize || '0.001'),
       initialMarginRatio: String(m.initialMarginRatio || '0.05'),
@@ -101,6 +106,67 @@ export async function listMarkets() {
   _marketsCache = perps;
   _marketsCacheTs = Date.now();
   return perps;
+}
+
+export function normalizeVerifiedDerivativeMarkets(payload) {
+  const list = Array.isArray(payload?.data) ? payload.data : [];
+  const seen = new Set();
+  const markets = [];
+
+  for (const m of list) {
+    const marketId = String(m?.marketId || '').trim();
+    if (!marketId || seen.has(marketId.toLowerCase())) continue;
+
+    const ticker = String(m?.ticker || '');
+    const tickerUpper = ticker.toUpperCase();
+    const quoteSymbol = String(m?.quoteToken?.symbol || '').toUpperCase();
+    const quoteDenom = String(m?.quoteDenom || m?.quoteToken?.denom || '').toLowerCase();
+    const isUsdc =
+      quoteSymbol === 'USDC' ||
+      quoteDenom === USDC_QUOTE_DENOM ||
+      tickerUpper.includes('/USDC');
+
+    if (m?.isVerified !== true) continue;
+    if (String(m?.marketStatus || '').toLowerCase() !== 'active') continue;
+    if (m?.isPerpetual !== true) continue;
+    if (!isUsdc) continue;
+
+    seen.add(marketId.toLowerCase());
+    markets.push({
+      marketId,
+      ticker,
+      symbol: String(m?.baseToken?.symbol || ticker.split('/')[0] || ''),
+      name: String(m?.baseToken?.name || ''),
+      logo: String(m?.baseToken?.logo || ''),
+      slug: String(m?.slug || ''),
+    });
+  }
+
+  return markets;
+}
+
+export async function fetchVerifiedDerivativeMarkets() {
+  if (_verifiedBffMarketsCache && Date.now() - _verifiedBffMarketsCacheTs < CACHE_TTL_MS) {
+    return _verifiedBffMarketsCache;
+  }
+
+  const res = await fetch(BFF_DERIVATIVE_MARKETS_URL, {
+    headers: { accept: 'application/json' },
+  });
+
+  if (!res.ok) {
+    throw new Error(`BFF markets request failed (${res.status})`);
+  }
+
+  const payload = await res.json();
+  const markets = normalizeVerifiedDerivativeMarkets(payload);
+  if (markets.length === 0) {
+    throw new Error('BFF returned no verified derivative markets');
+  }
+
+  _verifiedBffMarketsCache = markets;
+  _verifiedBffMarketsCacheTs = Date.now();
+  return markets;
 }
 
 export async function resolveMarket(symbol) {

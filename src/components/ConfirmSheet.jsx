@@ -34,7 +34,7 @@ export default function ConfirmSheet({ bet, onConfirm, onEdit }) {
             Confirm your bet
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <CoinLogo symbol={bet.market.symbol} size={44} />
+            <CoinLogo symbol={bet.market.symbol} logoUrl={bet.market.logo} size={44} />
             <div style={{ flex: 1 }}>
               <div style={{
                 fontSize: 22, fontWeight: 700,

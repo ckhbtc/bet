@@ -32,7 +32,7 @@ export default function MarketCard({ market, onPlaceBet }) {
     >
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <CoinLogo symbol={market.symbol} size={40} />
+          <CoinLogo symbol={market.symbol} logoUrl={market.logo} size={40} />
           <div>
             <div style={{
               fontSize: 18, fontWeight: 700, letterSpacing: -0.3,

@@ -37,8 +37,8 @@ const LOGO_URLS = {
   HOOD:  'https://imagedelivery.net/lPzngbR8EltRfBOi_WYaXw/70be479d-162e-45f7-5986-7ebdc17cb200/public',
 };
 
-export default function CoinLogo({ symbol, size = 36 }) {
-  const url = LOGO_URLS[symbol];
+export default function CoinLogo({ symbol, logoUrl = '', size = 36 }) {
+  const url = logoUrl || LOGO_URLS[symbol];
   if (url) {
     return (
       <img
