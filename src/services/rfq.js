@@ -959,6 +959,7 @@ export async function tradeCloseRfq({
   side,
   quantity,
   slippage = 0.02,
+  onProgress = null,
 }) {
   const session = requireSession(granterAddress);
   if (Number(session.scopeVersion || 1) < AUTHZ_SCOPE_VERSION) {
@@ -972,9 +973,18 @@ export async function tradeCloseRfq({
     session,
     marketId: market.marketId,
     input,
+    onProgress,
   });
-  await cleanupReduceOnlyOrdersForMarket({ session, market });
-  await cancelActiveConditionalOrdersForMarket({ session, marketId: market.marketId });
+  try {
+    await cleanupReduceOnlyOrdersForMarket({ session, market });
+  } catch (err) {
+    console.warn('cash-out reduce-only cleanup failed after close succeeded:', err.message);
+  }
+  try {
+    await cancelActiveConditionalOrdersForMarket({ session, marketId: market.marketId });
+  } catch (err) {
+    console.warn('cash-out conditional cleanup failed after close succeeded:', err.message);
+  }
 
   return {
     ...closeResult,

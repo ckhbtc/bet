@@ -160,7 +160,20 @@ export default function App() {
   const handleCashOut = useCallback(async (position) => {
     if (!connected || !position.market) return;
 
-    setTxStatus({ type: 'loading', message: 'Requesting cash-out quote...' });
+    setTxStatus({ type: 'loading', message: 'Submitting cash-out order' });
+
+    let closeConfirmed = false;
+    const settleCloseConfirmed = (result) => {
+      if (closeConfirmed) return;
+      closeConfirmed = true;
+      setTxStatus({
+        type: 'success',
+        message: 'Cash-out order confirmed',
+        txHash: result?.txHash,
+      });
+      refreshBalances();
+      useMarketStore.getState().fetchPositions(useWalletStore.getState().injAddress);
+    };
 
     try {
       const result = await tradeCloseRfq({
@@ -168,16 +181,17 @@ export default function App() {
         marketId: position.marketId,
         side: position.side,
         quantity: position.quantity,
+        onProgress: ({ phase, result: progressResult }) => {
+          if (phase === 'matched') {
+            setTxStatus({ type: 'loading', message: 'Cash-out order matched' });
+          }
+          if (phase === 'confirmed') {
+            settleCloseConfirmed(progressResult);
+          }
+        },
       });
 
-      setTxStatus({
-        type: 'success',
-        message: 'Position closed!',
-        txHash: result.txHash,
-      });
-
-      refreshBalances();
-      useMarketStore.getState().fetchPositions(useWalletStore.getState().injAddress);
+      if (!closeConfirmed) settleCloseConfirmed(result);
 
       clearTxStatusSoon();
     } catch (err) {
