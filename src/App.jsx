@@ -110,9 +110,26 @@ export default function App() {
 
     setTxStatus({
       type: 'loading',
-      message: 'Requesting RFQ quotes...',
+      message: 'Order submitted',
     });
     setPendingBet(null);
+
+    let openConfirmed = false;
+    const settleOpenConfirmed = (result) => {
+      if (openConfirmed) return;
+      openConfirmed = true;
+      setTxStatus({
+        type: 'success',
+        message: 'Order confirmed.',
+        txHash: result?.txHash,
+      });
+      setSelectedMarket(null);
+      setView('bets');
+      setConfetti(true);
+      setTimeout(() => setConfetti(false), 3500);
+      refreshBalances();
+      useMarketStore.getState().fetchPositions(useWalletStore.getState().injAddress);
+    };
 
     try {
       const result = await tradeOpenRfq({
@@ -122,19 +139,19 @@ export default function App() {
         stakeUsdt: pendingBet.stake,
         leverage: aggrConfig.leverage,
         tpPrice: pendingBet.targetPrice,
+        onProgress: ({ phase, result: progressResult }) => {
+          if (phase === 'matched') {
+            setTxStatus({ type: 'loading', message: 'Order matched.' });
+          }
+          if (phase === 'confirmed') {
+            settleOpenConfirmed(progressResult);
+          }
+        },
       });
 
       const status = getOpenTradeStatus(result);
+      if (!openConfirmed) settleOpenConfirmed(result);
       setTxStatus(status);
-      setSelectedMarket(null);
-      setView('bets');
-      if (status.type === 'success') {
-        setConfetti(true);
-        setTimeout(() => setConfetti(false), 3500);
-      }
-
-      refreshBalances();
-      useMarketStore.getState().fetchPositions(useWalletStore.getState().injAddress);
 
       clearTxStatusSoon();
     } catch (err) {
@@ -264,7 +281,7 @@ export default function App() {
           animation: 'slide-up 0.3s ease',
           maxWidth: 400,
         }}>
-          {txStatus.type === 'loading' && '⏳ '}{txStatus.type === 'warning' && '! '}{txStatus.message}
+          {txStatus.type === 'warning' && '! '}{txStatus.message}
           {txStatus.txHash && (
             <>
               {' '}

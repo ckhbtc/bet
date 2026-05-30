@@ -8,14 +8,14 @@ export function getOpenTradeStatus(result) {
   if (tpFailed) {
     return {
       type: 'warning',
-      message: `Trade opened, but take-profit failed: ${shortenError(result.takeProfit.error)}`,
+      message: `Order confirmed. Take-profit failed: ${shortenError(result.takeProfit.error)}`,
       txHash: result.txHash,
     };
   }
 
   return {
     type: 'success',
-    message: 'Trade placed!',
+    message: 'Order confirmed.',
     txHash: result.txHash,
   };
 }

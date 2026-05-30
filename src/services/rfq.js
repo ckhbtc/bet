@@ -792,6 +792,7 @@ export async function executeRfqGatewayAutoSign({
   session,
   marketId,
   input,
+  onProgress = null,
   gatewayApi = rfqGatewayApi,
   txApiClient = txApi,
 }) {
@@ -811,12 +812,14 @@ export async function executeRfqGatewayAutoSign({
   if (!prepared.quotes?.length) {
     throw new Error('No executable RFQ quote returned. RFQ gateway selected 0 quote(s).');
   }
+  onProgress?.({ phase: 'matched', prepared });
 
   const result = await broadcastPreparedRfqAutoSign({
     prepared,
     session,
     txApiClient,
   });
+  onProgress?.({ phase: 'confirmed', prepared, result });
 
   return {
     ...result,
@@ -896,6 +899,7 @@ export async function tradeOpenRfq({
   leverage,
   slippage = 0.01,
   tpPrice = null,
+  onProgress = null,
 }) {
   const session = requireSession(granterAddress);
   if (Number(session.scopeVersion || 1) < AUTHZ_SCOPE_VERSION) {
@@ -910,6 +914,7 @@ export async function tradeOpenRfq({
     session,
     marketId: market.marketId,
     input,
+    onProgress,
   });
 
   let takeProfit = tpPrice && Number(tpPrice) > 0
