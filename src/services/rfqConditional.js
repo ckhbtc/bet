@@ -10,6 +10,7 @@ import {
   RFQ_CHAIN_ID,
   RFQ_CONTRACT_ADDRESS,
   RFQ_EVM_CHAIN_ID,
+  RFQ_GRPC_WEB_URL,
   RFQ_TPSL_DEADLINE_MS,
   RFQ_TPSL_MIN_FILL_RATIO,
   RFQ_TPSL_NONCE_WINDOW_MS,
@@ -23,7 +24,7 @@ import { broadcastViaAuthz } from './trade.js';
 const NETWORK = Network.MainnetSentry;
 const endpoints = getNetworkEndpoints(NETWORK);
 const wasmApi = new ChainGrpcWasmApi(endpoints.grpc);
-const rfqApi = new IndexerGrpcRFQApi(endpoints.indexer);
+const rfqApi = new IndexerGrpcRFQApi(RFQ_GRPC_WEB_URL);
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 const SIGNED_TAKER_INTENT_TYPES = {
   EIP712Domain: [

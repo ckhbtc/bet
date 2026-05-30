@@ -13,7 +13,7 @@ import {
 } from '@injectivelabs/sdk-ts';
 import { getNetworkEndpoints, Network } from '@injectivelabs/networks';
 import Decimal from 'decimal.js';
-import { RFQ_TPSL_TRIGGER } from './rfqConstants.js';
+import { RFQ_GRPC_WEB_URL, RFQ_TPSL_TRIGGER } from './rfqConstants.js';
 
 const NETWORK = Network.MainnetSentry;
 const endpoints = getNetworkEndpoints(NETWORK);
@@ -21,7 +21,7 @@ const endpoints = getNetworkEndpoints(NETWORK);
 const derivativesApi = new IndexerGrpcDerivativesApi(endpoints.indexer);
 const oracleApi = new IndexerGrpcOracleApi(endpoints.indexer);
 const portfolioApi = new IndexerGrpcAccountPortfolioApi(endpoints.indexer);
-const rfqApi = new IndexerGrpcRFQApi(endpoints.indexer);
+const rfqApi = new IndexerGrpcRFQApi(RFQ_GRPC_WEB_URL);
 const chronosDerivativesApi = new IndexerRestDerivativesChronosApi(`${endpoints.chronos}/api/chronos/v1/derivative`);
 
 const QUOTE_DECIMALS = 6;

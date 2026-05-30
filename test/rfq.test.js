@@ -29,6 +29,7 @@ import {
   RFQ_CHAIN_ID,
   RFQ_CONTRACT_ADDRESS,
   RFQ_EVM_CHAIN_ID,
+  RFQ_GRPC_WEB_URL,
   RFQ_COLLECT_QUOTES_MS,
 } from '../src/services/rfqConstants.js';
 
@@ -82,6 +83,11 @@ test('buildRfqOrderInput formats human RFQ decimals from market ticks', () => {
 
 test('maxOpenLeverage includes RFQ slippage in the market margin cap', () => {
   assert.equal(formatLeverage(maxOpenLeverage('0.083333', 0.01)), '10.6');
+});
+
+test('RFQ conditional orders use the public RFQ grpc-web host', () => {
+  assert.equal(new URL(RFQ_GRPC_WEB_URL).host, 'rfq.grpc-web.injective.network');
+  assert.doesNotMatch(RFQ_GRPC_WEB_URL, /sentry\.exchange/);
 });
 
 test('buildRfqOrderInput rejects leverage above the market margin cap', () => {
