@@ -17,6 +17,7 @@ test('normalizeVerifiedDerivativeMarkets keeps active verified USDC perps', () =
           symbol: 'DOGE',
           logo: 'https://example.com/doge.png',
         },
+        priceDecimals: 4,
         slug: 'doge-usdc-perp',
       },
       {
@@ -57,7 +58,7 @@ test('normalizeVerifiedDerivativeMarkets keeps active verified USDC perps', () =
       name: 'Dogecoin',
       logo: 'https://example.com/doge.png',
       slug: 'doge-usdc-perp',
+      priceDecimals: 4,
     },
   ]);
 });
-

@@ -7,6 +7,7 @@ export default function ConfirmSheet({ bet, onConfirm, onEdit }) {
   const color = isUp ? 'var(--green)' : 'var(--red)';
   const colorDim = isUp ? 'var(--green-dim)' : 'var(--red-dim)';
   const multiplier = bet.stake > 0 ? bet.winTarget / bet.stake : 0;
+  const priceDecimals = bet.market.priceDecimals;
 
   return (
     <div style={{
@@ -48,7 +49,7 @@ export default function ConfirmSheet({ bet, onConfirm, onEdit }) {
                 color: 'var(--text-muted)', marginTop: 2,
                 fontVariantNumeric: 'tabular-nums',
               }}>
-                ${formatPrice(bet.market.price)}
+                ${formatPrice(bet.market.price, priceDecimals)}
               </div>
             </div>
             <span style={{
@@ -135,7 +136,7 @@ export default function ConfirmSheet({ bet, onConfirm, onEdit }) {
                 fontSize: 16, fontWeight: 700,
                 fontFamily: 'var(--font-heading)', color: 'var(--accent)',
                 fontVariantNumeric: 'tabular-nums',
-              }}>${formatPrice(bet.targetPrice)}</div>
+              }}>${formatPrice(bet.targetPrice, priceDecimals)}</div>
             </div>
             <div style={{
               background: `${aggrConfig.color}15`, border: `1px solid ${aggrConfig.color}`,
@@ -162,10 +163,10 @@ export default function ConfirmSheet({ bet, onConfirm, onEdit }) {
           }}>
             If {bet.market.symbol} reaches{' '}
             <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
-              ${formatPrice(bet.liqPrice)}
+              ${formatPrice(bet.liqPrice, priceDecimals)}
             </span>{' '}before{' '}
             <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
-              ${formatPrice(bet.targetPrice)}
+              ${formatPrice(bet.targetPrice, priceDecimals)}
             </span>, you may lose your ${bet.stake} bet.
           </div>
 

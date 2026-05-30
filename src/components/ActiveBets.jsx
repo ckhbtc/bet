@@ -40,6 +40,7 @@ export default function ActiveBets({ bets, onCashOut, onCashOutAll, devMode }) {
       {bets.map(bet => {
         const status = STATUS_CONFIG[bet.status] || STATUS_CONFIG.close;
         const isPositive = bet.pnl >= 0;
+        const priceDecimals = bet.market?.priceDecimals;
 
         return (
           <div key={bet.id} style={{
@@ -106,11 +107,11 @@ export default function ActiveBets({ bets, onCashOut, onCashOutAll, devMode }) {
               }}>
                 <div>
                   <span style={{ color: 'var(--text-muted)' }}>Entry </span>
-                  <span style={{ color: 'var(--text-secondary)' }}>${formatPrice(bet.entryPrice)}</span>
+                  <span style={{ color: 'var(--text-secondary)' }}>${formatPrice(bet.entryPrice, priceDecimals)}</span>
                 </div>
                 <div>
                   <span style={{ color: 'var(--text-muted)' }}>Current </span>
-                  <span style={{ color: isPositive ? 'var(--green)' : 'var(--red)' }}>${formatPrice(bet.markPrice || bet.currentPrice)}</span>
+                  <span style={{ color: isPositive ? 'var(--green)' : 'var(--red)' }}>${formatPrice(bet.markPrice || bet.currentPrice, priceDecimals)}</span>
                 </div>
               </div>
 
@@ -144,6 +145,7 @@ export default function ActiveBets({ bets, onCashOut, onCashOutAll, devMode }) {
                       markPrice={bet.markPrice || bet.currentPrice}
                       direction={bet.direction}
                       tpIsImplicit={!bet.tpPrice || bet.tpPrice <= 0}
+                      priceDecimals={priceDecimals}
                     />
                   </div>
                 );

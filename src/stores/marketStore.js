@@ -23,6 +23,7 @@ function withBffMetadata(chainMarket, bffMarket) {
     tokenName: bffMarket.name || '',
     logo: bffMarket.logo || '',
     slug: bffMarket.slug || '',
+    priceDecimals: bffMarket.priceDecimals ?? chainMarket.priceDecimals ?? null,
   };
 }
 

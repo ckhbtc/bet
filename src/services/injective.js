@@ -29,6 +29,22 @@ const INJ_DECIMALS = 18;
 const USDC_QUOTE_DENOM = 'erc20:0xa00c59ff5a080d2b954d0c75e46e22a0c371235a';
 const BFF_DERIVATIVE_MARKETS_URL = 'https://bff-api.injective.network/api/v1/derivative/markets/tc?network=mainnet&marketStatus=active';
 
+function normalizePriceDecimals(decimals) {
+  const n = Number(decimals);
+  if (!Number.isFinite(n)) return null;
+  return Math.max(0, Math.min(12, Math.floor(n)));
+}
+
+function priceDecimalsFromTickSize(minPriceTickSize, quoteDecimals = QUOTE_DECIMALS) {
+  try {
+    const tick = new Decimal(minPriceTickSize || 0);
+    if (!tick.isFinite() || tick.lte(0)) return null;
+    return normalizePriceDecimals(tick.div(new Decimal(10).pow(quoteDecimals)).decimalPlaces());
+  } catch {
+    return null;
+  }
+}
+
 // ─── Token registry ──────────────────────────────────────────────────────────
 //
 // Peggy entries cover the legacy Ethereum-bridged stables.
@@ -86,13 +102,15 @@ export async function listMarkets() {
     const ticker = String(m.ticker || '');
     const symbolFromTicker = ticker.split('/')[0] || '';
     const oracleBase = String(m.oracleBase || symbolFromTicker);
+    const minPriceTickSize = String(m.minPriceTickSize || '0.001');
 
     perps.push({
       symbol: symbolFromTicker || oracleBase,
       ticker,
       marketId: String(m.marketId || ''),
       quoteDenom: String(m.quoteDenom || ''),
-      minPriceTickSize: String(m.minPriceTickSize || '0.001'),
+      minPriceTickSize,
+      priceDecimals: priceDecimalsFromTickSize(minPriceTickSize),
       minQuantityTickSize: String(m.minQuantityTickSize || '0.001'),
       initialMarginRatio: String(m.initialMarginRatio || '0.05'),
       maintenanceMarginRatio: String(m.maintenanceMarginRatio || '0.02'),
@@ -139,6 +157,8 @@ export function normalizeVerifiedDerivativeMarkets(payload) {
       name: String(m?.baseToken?.name || ''),
       logo: String(m?.baseToken?.logo || ''),
       slug: String(m?.slug || ''),
+      priceDecimals: normalizePriceDecimals(m?.priceDecimals)
+        ?? priceDecimalsFromTickSize(m?.minPriceTickSize, m?.quoteToken?.decimals ?? QUOTE_DECIMALS),
     });
   }
 

@@ -19,6 +19,7 @@ export default function BetPanel({
   const [aggr, setAggr] = useState('BALANCED');
 
   const aggrConfig = AGGRESSIVENESS[aggr];
+  const priceDecimals = market.priceDecimals;
   const stakeNum = Number(stake) || 0;
   const winTargetNum = Number(winTarget) || 0;
   const safeStake = Math.max(1, stakeNum);
@@ -95,7 +96,7 @@ export default function BetPanel({
             fontSize: 22, fontWeight: 700, letterSpacing: -0.5,
             fontFamily: 'var(--font-heading)', color: 'var(--text-secondary)',
             fontVariantNumeric: 'tabular-nums', marginTop: 4,
-          }}>${formatPrice(market.price)}</div>
+          }}>${formatPrice(market.price, priceDecimals)}</div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
           <Sparkline data={market.sparkline} width={100} height={40} color={market.change24h >= 0 ? 'var(--green)' : 'var(--red)'} />
@@ -267,7 +268,7 @@ export default function BetPanel({
             letterSpacing: -0.5, color: 'var(--accent)',
             fontVariantNumeric: 'tabular-nums',
           }}>
-            ${formatPrice(targetPrice)}
+            ${formatPrice(targetPrice, priceDecimals)}
           </div>
         </div>
       )}
@@ -301,10 +302,10 @@ export default function BetPanel({
         }}>
           If {market.symbol} reaches{' '}
           <span style={{ color: 'var(--red)', fontFamily: 'var(--font-mono)' }}>
-            ${formatPrice(liqPrice)}
+            ${formatPrice(liqPrice, priceDecimals)}
           </span>{' '}before{' '}
           <span style={{ color: 'var(--green)', fontFamily: 'var(--font-mono)' }}>
-            ${formatPrice(targetPrice)}
+            ${formatPrice(targetPrice, priceDecimals)}
           </span>, you may lose your ${stakeNum} bet.
         </div>
       )}

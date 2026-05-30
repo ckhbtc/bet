@@ -5,7 +5,7 @@ import { formatPrice } from '../data/mockData';
  * Fill grows from the center toward whichever edge the current mark is closer to,
  * so the user sees at a glance which side is winning.
  */
-export default function ProgressBar({ liqPrice, tpPrice, markPrice, direction }) {
+export default function ProgressBar({ liqPrice, tpPrice, markPrice, direction, priceDecimals = null }) {
   if (liqPrice == null || tpPrice == null || markPrice == null) return null;
 
   const isLong = direction === 'up' || direction === 'long';
@@ -30,10 +30,10 @@ export default function ProgressBar({ liqPrice, tpPrice, markPrice, direction })
         color: 'var(--text-muted)', marginBottom: 6,
       }}>
         <span style={{ color: liqOnLeft ? 'var(--red)' : 'var(--green)' }}>
-          {liqOnLeft ? 'Liq' : 'TP'} ${formatPrice(low)}
+          {liqOnLeft ? 'Liq' : 'TP'} ${formatPrice(low, priceDecimals)}
         </span>
         <span style={{ color: liqOnLeft ? 'var(--green)' : 'var(--red)' }}>
-          {liqOnLeft ? 'TP' : 'Liq'} ${formatPrice(high)}
+          {liqOnLeft ? 'TP' : 'Liq'} ${formatPrice(high, priceDecimals)}
         </span>
       </div>
 

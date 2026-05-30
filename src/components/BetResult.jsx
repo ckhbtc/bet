@@ -2,6 +2,7 @@ import { formatPrice } from '../data/mockData';
 
 export default function BetResult({ bet, onPlaceAnother, onGoHome }) {
   const isWin = bet.pnl >= 0;
+  const priceDecimals = bet.market?.priceDecimals;
 
   return (
     <div style={{
@@ -61,8 +62,8 @@ export default function BetResult({ bet, onPlaceAnother, onGoHome }) {
           {[
             [bet.direction === 'up' ? '🟢' : '🔴', `${bet.asset} ${bet.direction === 'up' ? 'Up' : 'Down'}`],
             ['Bet', `$${bet.stake}`],
-            ['Entry', `$${formatPrice(bet.entryPrice)}`],
-            ['Close', `$${formatPrice(bet.currentPrice)}`],
+            ['Entry', `$${formatPrice(bet.entryPrice, priceDecimals)}`],
+            ['Close', `$${formatPrice(bet.currentPrice, priceDecimals)}`],
             ['P&L', `${bet.pnl >= 0 ? '+' : ''}$${bet.pnl.toFixed(2)}`],
           ].map(([label, value], i) => (
             <div key={i} style={{

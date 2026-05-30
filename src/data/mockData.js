@@ -1,3 +1,5 @@
+import Decimal from 'decimal.js';
+
 // Leaderboard feed (mock — real leaderboard would need indexer queries)
 export const LEADERBOARD_FEED = [
   { user: '@degen_dan', amount: 420, asset: 'ETH', direction: '↑' },
@@ -17,10 +19,38 @@ export const AGGRESSIVENESS = {
   DEGEN: { leverage: 25, label: 'Degen', desc: 'Small price move wins', color: '#ef4444' },
 };
 
-export function formatPrice(price) {
-  if (price >= 1000) return price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  if (price >= 1) return price.toFixed(2);
-  return price.toFixed(4);
+export function normalizePriceDecimals(decimals) {
+  const n = Number(decimals);
+  if (!Number.isFinite(n)) return null;
+  return Math.max(0, Math.min(12, Math.floor(n)));
+}
+
+export function priceDecimalsFromTickSize(minPriceTickSize, quoteDecimals = 6) {
+  try {
+    const tick = new Decimal(minPriceTickSize || 0);
+    if (!tick.isFinite() || tick.lte(0)) return null;
+    const humanTick = tick.div(new Decimal(10).pow(quoteDecimals));
+    return normalizePriceDecimals(humanTick.decimalPlaces());
+  } catch {
+    return null;
+  }
+}
+
+export function formatPrice(price, decimals = null) {
+  const n = Number(price);
+  if (!Number.isFinite(n)) return '0.00';
+
+  const normalizedDecimals = normalizePriceDecimals(decimals);
+  if (normalizedDecimals != null) {
+    return n.toLocaleString('en-US', {
+      minimumFractionDigits: normalizedDecimals,
+      maximumFractionDigits: normalizedDecimals,
+    });
+  }
+
+  if (n >= 1000) return n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (n >= 1) return n.toFixed(2);
+  return n.toFixed(4);
 }
 
 export function formatDollar(amount) {

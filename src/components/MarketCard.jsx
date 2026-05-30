@@ -60,7 +60,7 @@ export default function MarketCard({ market, onPlaceBet }) {
             lineHeight: 1,
             fontVariantNumeric: 'tabular-nums',
           }}>
-            ${formatPrice(market.price)}
+            ${formatPrice(market.price, market.priceDecimals)}
           </div>
           <div style={{
             fontSize: 12,
