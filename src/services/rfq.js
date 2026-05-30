@@ -37,6 +37,7 @@ import {
   cancelActiveConditionalOrdersForMarket,
   submitTakeProfitIntent,
 } from './rfqConditional.js';
+import { assertOpenMarginAllowed } from './leverageLimits.js';
 
 const GRPC_HEADER_SIZE = 5;
 const GRPC_COMPRESSION_NONE = 0;
@@ -842,6 +843,15 @@ export function buildRfqOrderInput({ market, oraclePrice, side, stakeUsdt, lever
     humanPriceTick(market.minPriceTickSize),
     isLong ? Decimal.ROUND_CEIL : Decimal.ROUND_FLOOR
   );
+  assertOpenMarginAllowed({
+    market,
+    stake,
+    quantity,
+    oraclePrice: price,
+    worstPrice,
+    side,
+    slippage,
+  });
 
   return {
     direction: isLong ? 'long' : 'short',

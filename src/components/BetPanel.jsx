@@ -1,6 +1,12 @@
-import { useState, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import Sparkline from './Sparkline';
 import { formatPrice, AGGRESSIVENESS, liquidationPrice } from '../data/mockData';
+import {
+  RFQ_OPEN_SLIPPAGE,
+  formatLeverage,
+  isOpenLeverageAllowed,
+  maxOpenLeverage,
+} from '../services/leverageLimits';
 
 const QUICK_STAKES = [10, 25, 50, 100, 250];
 
@@ -18,12 +24,38 @@ export default function BetPanel({
   const [winTarget, setWinTarget] = useState('100');
   const [aggr, setAggr] = useState('BALANCED');
 
-  const aggrConfig = AGGRESSIVENESS[aggr];
+  const aggrConfig = AGGRESSIVENESS[aggr] || AGGRESSIVENESS.BALANCED;
   const priceDecimals = market.priceDecimals;
   const stakeNum = Number(stake) || 0;
   const winTargetNum = Number(winTarget) || 0;
   const safeStake = Math.max(1, stakeNum);
   const safeWinTarget = Math.max(1, winTargetNum);
+  const maxLeverage = useMemo(
+    () => maxOpenLeverage(market.initialMarginRatio, RFQ_OPEN_SLIPPAGE),
+    [market.initialMarginRatio]
+  );
+  const leverageOptions = useMemo(() => Object.entries(AGGRESSIVENESS).map(([key, config]) => ({
+    key,
+    config,
+    allowed: isOpenLeverageAllowed({
+      initialMarginRatio: market.initialMarginRatio,
+      leverage: config.leverage,
+      slippage: RFQ_OPEN_SLIPPAGE,
+    }),
+  })), [market.initialMarginRatio]);
+  const selectedLeverageAllowed = isOpenLeverageAllowed({
+    initialMarginRatio: market.initialMarginRatio,
+    leverage: aggrConfig.leverage,
+    slippage: RFQ_OPEN_SLIPPAGE,
+  });
+
+  useEffect(() => {
+    const selected = leverageOptions.find(option => option.key === aggr);
+    if (!selected || selected.allowed) return;
+
+    const fallback = [...leverageOptions].reverse().find(option => option.allowed);
+    if (fallback && fallback.key !== aggr) setAggr(fallback.key);
+  }, [aggr, leverageOptions]);
 
   const targetPrice = useMemo(() => {
     const lev = aggrConfig.leverage;
@@ -69,7 +101,7 @@ export default function BetPanel({
 
   const canPlaceBet = stakeNum >= 1 && winTargetNum >= 1 && stakeNum <= balance
     && !isNaN(targetPrice) && targetPrice > 0 && !unreachable
-    && rfqReady;
+    && selectedLeverageAllowed && rfqReady;
 
   return (
     <div style={{
@@ -221,23 +253,37 @@ export default function BetPanel({
           textTransform: 'uppercase', letterSpacing: 0.6, display: 'block', marginBottom: 8,
         }}>Aggressiveness</label>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
-          {Object.entries(AGGRESSIVENESS).map(([key, config]) => (
-            <button
-              key={key}
-              onClick={() => setAggr(key)}
-              style={{
-                background: aggr === key ? `${config.color}15` : 'var(--bg-primary)',
-                border: `1px solid ${aggr === key ? config.color : 'var(--border)'}`,
-                borderRadius: 8, padding: '10px 8px', cursor: 'pointer',
-                display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
-              }}
-            >
-              <span style={{ fontSize: 13, fontWeight: 600, color: aggr === key ? config.color : 'var(--text-muted)', fontFamily: 'var(--font-heading)' }}>
-                {config.label}
-              </span>
-              <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>{config.desc}</span>
-            </button>
-          ))}
+          {leverageOptions.map(({ key, config, allowed }) => {
+            const active = aggr === key;
+            const disabled = !allowed;
+            return (
+              <button
+                key={key}
+                onClick={() => !disabled && setAggr(key)}
+                disabled={disabled}
+                title={disabled ? `Max ${formatLeverage(maxLeverage)}x on this market` : config.desc}
+                style={{
+                  background: active && !disabled ? `${config.color}15` : 'var(--bg-primary)',
+                  border: `1px solid ${active && !disabled ? config.color : 'var(--border)'}`,
+                  borderRadius: 8, padding: '10px 8px',
+                  cursor: disabled ? 'not-allowed' : 'pointer',
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+                  opacity: disabled ? 0.42 : 1,
+                }}
+              >
+                <span style={{
+                  fontSize: 13, fontWeight: 600,
+                  color: active && !disabled ? config.color : 'var(--text-muted)',
+                  fontFamily: 'var(--font-heading)',
+                }}>
+                  {config.label}
+                </span>
+                <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>
+                  {disabled ? `Max ${formatLeverage(maxLeverage)}x` : config.desc}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -281,6 +327,17 @@ export default function BetPanel({
           fontSize: 12, color: 'var(--red)', textAlign: 'center',
         }}>
           Insufficient balance. You have ${balance.toLocaleString()}.
+        </div>
+      )}
+
+      {!selectedLeverageAllowed && (
+        <div style={{
+          background: 'var(--red-dim)', border: '1px solid var(--red)',
+          borderRadius: 8, padding: '8px 12px', marginBottom: 12,
+          fontSize: 12, color: 'var(--red)', textAlign: 'center', lineHeight: 1.5,
+        }}>
+          {aggrConfig.label} is above {market.symbol}'s {formatLeverage(maxLeverage)}x limit.
+          Choose a lower aggressiveness.
         </div>
       )}
 

@@ -22,6 +22,10 @@ import {
   signatureHexToBase64,
 } from '../src/services/rfq.js';
 import {
+  formatLeverage,
+  maxOpenLeverage,
+} from '../src/services/leverageLimits.js';
+import {
   RFQ_CHAIN_ID,
   RFQ_CONTRACT_ADDRESS,
   RFQ_EVM_CHAIN_ID,
@@ -61,6 +65,39 @@ function quote(overrides = {}) {
 test('buildRfqOrderInput formats human RFQ decimals from market ticks', () => {
   const input = buildRfqOrderInput({
     market,
+    oraclePrice: '100',
+    side: 'long',
+    stakeUsdt: '50',
+    leverage: '10',
+    slippage: 0.01,
+  });
+
+  assert.deepEqual(input, {
+    direction: 'long',
+    margin: '50',
+    quantity: '5',
+    worstPrice: '101',
+  });
+});
+
+test('maxOpenLeverage includes RFQ slippage in the market margin cap', () => {
+  assert.equal(formatLeverage(maxOpenLeverage('0.083333', 0.01)), '10.6');
+});
+
+test('buildRfqOrderInput rejects leverage above the market margin cap', () => {
+  assert.throws(() => buildRfqOrderInput({
+    market: { ...market, symbol: 'DOT', initialMarginRatio: '0.083333' },
+    oraclePrice: '100',
+    side: 'long',
+    stakeUsdt: '50',
+    leverage: '25',
+    slippage: 0.01,
+  }), /Selected leverage is too high for DOT\. Max is about 10\.6x/);
+});
+
+test('buildRfqOrderInput allows leverage within the market margin cap', () => {
+  const input = buildRfqOrderInput({
+    market: { ...market, symbol: 'DOT', initialMarginRatio: '0.083333' },
     oraclePrice: '100',
     side: 'long',
     stakeUsdt: '50',
