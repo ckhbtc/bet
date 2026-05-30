@@ -23,7 +23,10 @@ import {
 } from '../src/services/rfq.js';
 import {
   formatLeverage,
+  leverageOptionsForMarket,
+  leveragePresetRowForMax,
   maxOpenLeverage,
+  steppedMaxOpenLeverage,
 } from '../src/services/leverageLimits.js';
 import {
   RFQ_CHAIN_ID,
@@ -85,6 +88,40 @@ test('maxOpenLeverage includes RFQ slippage in the market margin cap', () => {
   assert.equal(formatLeverage(maxOpenLeverage('0.083333', 0.01)), '10.6');
 });
 
+test('steppedMaxOpenLeverage rounds the market cap down to a standard step', () => {
+  assert.equal(steppedMaxOpenLeverage('0.083333', 0.01), 10);
+});
+
+test('leverageOptionsForMarket uses the standard preset row for the safe max step', () => {
+  const options = leverageOptionsForMarket('0.083333', 0.01);
+
+  assert.deepEqual(
+    options.map(option => [option.key, option.leverage, option.allowed]),
+    [
+      ['LOW', 2, true],
+      ['MEDIUM', 3, true],
+      ['HIGH', 5, true],
+      ['MAX', 10, true],
+    ]
+  );
+});
+
+test('leveragePresetRowForMax matches the standard leverage table', () => {
+  assert.deepEqual(
+    [5, 10, 25, 50, 100].map(max => [
+      max,
+      Object.values(leveragePresetRowForMax(max).levels),
+    ]),
+    [
+      [5, [1, 2, 3, 5]],
+      [10, [2, 3, 5, 10]],
+      [25, [2, 5, 10, 25]],
+      [50, [5, 10, 25, 50]],
+      [100, [10, 25, 50, 100]],
+    ]
+  );
+});
+
 test('RFQ conditional orders use the public RFQ grpc-web host', () => {
   assert.equal(new URL(RFQ_GRPC_WEB_URL).host, 'rfq.grpc-web.injective.network');
   assert.doesNotMatch(RFQ_GRPC_WEB_URL, /sentry\.exchange/);
@@ -98,7 +135,7 @@ test('buildRfqOrderInput rejects leverage above the market margin cap', () => {
     stakeUsdt: '50',
     leverage: '25',
     slippage: 0.01,
-  }), /Selected leverage is too high for DOT\. Max is about 10\.6x/);
+  }), /Selected leverage is too high for DOT\. Max is 10x/);
 });
 
 test('buildRfqOrderInput allows leverage within the market margin cap', () => {

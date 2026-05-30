@@ -2,6 +2,22 @@ import Decimal from 'decimal.js';
 
 export const RFQ_OPEN_SLIPPAGE = 0.01;
 export const DEFAULT_INITIAL_MARGIN_RATIO = '0.05';
+export const STANDARD_MAX_LEVERAGE_STEPS = [5, 10, 25, 50, 100];
+
+export const LEVERAGE_PRESET_ROWS = [
+  { maxLeverage: 5, levels: { LOW: 1, MEDIUM: 2, HIGH: 3, MAX: 5 } },
+  { maxLeverage: 10, levels: { LOW: 2, MEDIUM: 3, HIGH: 5, MAX: 10 } },
+  { maxLeverage: 25, levels: { LOW: 2, MEDIUM: 5, HIGH: 10, MAX: 25 } },
+  { maxLeverage: 50, levels: { LOW: 5, MEDIUM: 10, HIGH: 25, MAX: 50 } },
+  { maxLeverage: 100, levels: { LOW: 10, MEDIUM: 25, HIGH: 50, MAX: 100 } },
+];
+
+export const LEVERAGE_LEVEL_META = {
+  LOW: { label: 'Low', desc: 'Big swing required', color: '#4a9eff' },
+  MEDIUM: { label: 'Medium', desc: 'Moderate move needed', color: '#f59e0b' },
+  HIGH: { label: 'High', desc: 'Small price move wins', color: '#ef4444' },
+  MAX: { label: 'Max', desc: 'Smallest price move wins', color: '#dc2626' },
+};
 
 function positiveDecimal(value, fallback) {
   try {
@@ -31,6 +47,43 @@ export function maxOpenLeverage(initialMarginRatio, slippage = RFQ_OPEN_SLIPPAGE
   const effectiveRatio = effectiveOpenMarginRatio(initialMarginRatio, slippage);
   if (!effectiveRatio.isFinite() || effectiveRatio.lte(0)) return Infinity;
   return Number(new Decimal(1).div(effectiveRatio).toDecimalPlaces(2, Decimal.ROUND_FLOOR));
+}
+
+export function steppedMaxOpenLeverage(initialMarginRatio, slippage = RFQ_OPEN_SLIPPAGE) {
+  const rawMax = maxOpenLeverage(initialMarginRatio, slippage);
+  if (!Number.isFinite(rawMax)) return STANDARD_MAX_LEVERAGE_STEPS[STANDARD_MAX_LEVERAGE_STEPS.length - 1];
+
+  const safeStep = [...STANDARD_MAX_LEVERAGE_STEPS]
+    .reverse()
+    .find(step => step <= rawMax);
+
+  return safeStep ?? 1;
+}
+
+export function leveragePresetRowForMax(maxLeverage) {
+  const max = Number(maxLeverage);
+  const fallback = LEVERAGE_PRESET_ROWS[0];
+  if (!Number.isFinite(max)) return LEVERAGE_PRESET_ROWS[LEVERAGE_PRESET_ROWS.length - 1];
+  return [...LEVERAGE_PRESET_ROWS].reverse().find(row => row.maxLeverage <= max) || fallback;
+}
+
+export function leverageOptionsForMarket(initialMarginRatio, slippage = RFQ_OPEN_SLIPPAGE) {
+  const steppedMax = steppedMaxOpenLeverage(initialMarginRatio, slippage);
+  const row = leveragePresetRowForMax(steppedMax);
+
+  return Object.entries(row.levels).map(([key, leverage]) => {
+    const meta = LEVERAGE_LEVEL_META[key];
+    return {
+      key,
+      leverage,
+      ...meta,
+      allowed: isOpenLeverageAllowed({
+        initialMarginRatio,
+        leverage,
+        slippage,
+      }),
+    };
+  });
 }
 
 export function formatLeverage(value) {
@@ -91,8 +144,8 @@ export function assertOpenMarginAllowed({
   if (margin.gte(requiredMargin)) return;
 
   const label = market?.symbol || String(market?.ticker || '').split('/')[0] || 'this market';
-  const maxLeverage = formatLeverage(maxOpenLeverage(market?.initialMarginRatio, slippage));
+  const maxLeverage = formatLeverage(steppedMaxOpenLeverage(market?.initialMarginRatio, slippage));
   throw new Error(
-    `Selected leverage is too high for ${label}. Max is about ${maxLeverage}x on this market. Choose a lower aggressiveness.`
+    `Selected leverage is too high for ${label}. Max is ${maxLeverage}x on this market. Choose a lower aggressiveness.`
   );
 }

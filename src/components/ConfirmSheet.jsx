@@ -1,8 +1,11 @@
-import { formatPrice, AGGRESSIVENESS } from '../data/mockData';
+import { formatPrice } from '../data/mockData';
+import { formatLeverage } from '../services/leverageLimits';
 import CoinLogo from './CoinLogo';
 
 export default function ConfirmSheet({ bet, onConfirm, onEdit }) {
-  const aggrConfig = AGGRESSIVENESS[bet.aggr];
+  const aggrLabel = bet.aggrLabel || bet.aggr || 'Medium';
+  const aggrColor = bet.aggrColor || '#f59e0b';
+  const leverageLabel = bet.leverage ? `${formatLeverage(bet.leverage)}x` : null;
   const isUp = bet.direction === 'up';
   const color = isUp ? 'var(--green)' : 'var(--red)';
   const colorDim = isUp ? 'var(--green-dim)' : 'var(--red-dim)';
@@ -139,7 +142,7 @@ export default function ConfirmSheet({ bet, onConfirm, onEdit }) {
               }}>${formatPrice(bet.targetPrice, priceDecimals)}</div>
             </div>
             <div style={{
-              background: `${aggrConfig.color}15`, border: `1px solid ${aggrConfig.color}`,
+              background: `${aggrColor}15`, border: `1px solid ${aggrColor}`,
               borderRadius: 10, padding: '10px 14px',
               display: 'flex', flexDirection: 'column', justifyContent: 'center',
               minWidth: 100,
@@ -150,8 +153,14 @@ export default function ConfirmSheet({ bet, onConfirm, onEdit }) {
               }}>Style</div>
               <div style={{
                 fontSize: 14, fontWeight: 700,
-                fontFamily: 'var(--font-heading)', color: aggrConfig.color,
-              }}>{aggrConfig.label}</div>
+                fontFamily: 'var(--font-heading)', color: aggrColor,
+              }}>{aggrLabel}</div>
+              {leverageLabel && (
+                <div style={{
+                  fontSize: 10, fontFamily: 'var(--font-mono)',
+                  color: 'var(--text-muted)', marginTop: 2,
+                }}>{leverageLabel}</div>
+              )}
             </div>
           </div>
 

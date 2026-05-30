@@ -15,7 +15,6 @@ import BetResult from './components/BetResult';
 import AuthZSetup from './components/AuthZSetup';
 import BridgeModal from './components/BridgeModal';
 import Confetti from './components/Confetti';
-import { AGGRESSIVENESS } from './data/mockData';
 import { tradeCloseRfq, tradeOpenRfq } from './services/rfq';
 import { shortTxHash, txExplorerUrl } from './services/explorer';
 import { getOpenTradeStatus } from './services/tradeResult';
@@ -106,8 +105,6 @@ export default function App() {
   const handleLockIn = useCallback(async () => {
     if (!pendingBet || !connected) return;
 
-    const aggrConfig = AGGRESSIVENESS[pendingBet.aggr];
-
     setTxStatus({
       type: 'loading',
       message: 'Order submitted',
@@ -137,7 +134,7 @@ export default function App() {
         marketId: pendingBet.market.marketId,
         side: pendingBet.direction === 'up' ? 'long' : 'short',
         stakeUsdt: pendingBet.stake,
-        leverage: aggrConfig.leverage,
+        leverage: pendingBet.leverage,
         tpPrice: pendingBet.targetPrice,
         onProgress: ({ phase, result: progressResult }) => {
           if (phase === 'matched') {
