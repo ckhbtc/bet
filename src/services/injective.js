@@ -286,6 +286,11 @@ export async function fetchBalances(injAddress) {
 
 // ─── Positions ────────────────────────────────────────────────────────────────
 
+export function normalizePositionQuantityForClose(quantity) {
+  const decimal = new Decimal(quantity || '0');
+  return decimal.isFinite() ? decimal.toFixed() : '0';
+}
+
 export async function fetchPositions(injAddress) {
   const markets = await listMarkets();
   const marketMap = new Map(markets.map(m => [m.marketId, m]));
@@ -355,7 +360,7 @@ export async function fetchPositions(injAddress) {
       market,
       side,
       direction: side === 'long' ? 'up' : 'down',
-      quantity: quantity.toFixed(4),
+      quantity: normalizePositionQuantityForClose(p.quantity),
       entryPrice: entryPrice.toNumber(),
       markPrice: markPrice.toNumber(),
       margin: margin.toNumber(),

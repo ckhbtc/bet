@@ -160,7 +160,7 @@ export default function App() {
   const handleCashOut = useCallback(async (position) => {
     if (!connected || !position.market) return;
 
-    setTxStatus({ type: 'loading', message: 'Requesting RFQ cash-out quote...' });
+    setTxStatus({ type: 'loading', message: 'Requesting cash-out quote...' });
 
     try {
       const result = await tradeCloseRfq({
@@ -196,7 +196,7 @@ export default function App() {
     let fail = 0;
     for (let i = 0; i < list.length; i++) {
       const pos = list[i];
-      setTxStatus({ type: 'loading', message: `RFQ cash out ${i + 1}/${list.length}: ${pos.asset}...` });
+      setTxStatus({ type: 'loading', message: `Cash out ${i + 1}/${list.length}: ${pos.asset}...` });
       try {
         await tradeCloseRfq({
           granterAddress: injAddress,
@@ -322,7 +322,7 @@ export default function App() {
                 </p>
                 {connected && session.active && !session.rfqReady && (
                   <div style={{ fontSize: 12, color: 'var(--accent)', marginTop: 8 }}>
-                    Re-authorize autosign to place RFQ bets.
+                    Re-authorize autosign to place bets.
                   </div>
                 )}
               </div>

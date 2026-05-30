@@ -346,7 +346,7 @@ export default function BetPanel({
           borderRadius: 8, padding: '8px 12px', marginBottom: 12,
           fontSize: 12, color: 'var(--accent)', textAlign: 'center', lineHeight: 1.5,
         }}>
-          RFQ needs updated autosign permissions. Revoke autosign, then authorize again.
+          Trading needs updated autosign permissions. Revoke autosign, then authorize again.
         </div>
       )}
 

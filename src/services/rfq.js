@@ -783,7 +783,7 @@ export async function broadcastPreparedRfqAutoSign({
 
   const response = await txApiClient.broadcast(txRaw);
   if (response.code !== 0) {
-    throw new Error(`RFQ settlement failed (code ${response.code}): ${response.rawLog}`);
+    throw new Error(`Trade settlement failed (code ${response.code}): ${response.rawLog}`);
   }
   return { txHash: response.txHash };
 }
@@ -903,7 +903,7 @@ export async function tradeOpenRfq({
 }) {
   const session = requireSession(granterAddress);
   if (Number(session.scopeVersion || 1) < AUTHZ_SCOPE_VERSION) {
-    throw new Error('RFQ needs updated autosign permissions. Revoke autosign, then authorize again to add the RFQ contract grants.');
+    throw new Error('Trading needs updated autosign permissions. Revoke autosign, then authorize again.');
   }
 
   const market = await getMarket(marketId);
@@ -962,7 +962,7 @@ export async function tradeCloseRfq({
 }) {
   const session = requireSession(granterAddress);
   if (Number(session.scopeVersion || 1) < AUTHZ_SCOPE_VERSION) {
-    throw new Error('RFQ needs updated autosign permissions. Revoke autosign, then authorize again to add the RFQ contract grants.');
+    throw new Error('Trading needs updated autosign permissions. Revoke autosign, then authorize again.');
   }
 
   const market = await getMarket(marketId);

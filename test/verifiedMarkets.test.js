@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeVerifiedDerivativeMarkets } from '../src/services/injective.js';
+import {
+  normalizePositionQuantityForClose,
+  normalizeVerifiedDerivativeMarkets,
+} from '../src/services/injective.js';
 
 test('normalizeVerifiedDerivativeMarkets keeps active verified USDC perps', () => {
   const markets = normalizeVerifiedDerivativeMarkets({
@@ -61,4 +64,9 @@ test('normalizeVerifiedDerivativeMarkets keeps active verified USDC perps', () =
       priceDecimals: 4,
     },
   ]);
+});
+
+test('normalizePositionQuantityForClose preserves tiny BTC quantities exactly', () => {
+  assert.equal(normalizePositionQuantityForClose('0.00004999'), '0.00004999');
+  assert.equal(normalizePositionQuantityForClose('1e-8'), '0.00000001');
 });
