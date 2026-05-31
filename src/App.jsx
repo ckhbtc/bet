@@ -15,12 +15,19 @@ import BetResult from './components/BetResult';
 import AuthZSetup from './components/AuthZSetup';
 import BridgeModal from './components/BridgeModal';
 import Confetti from './components/Confetti';
-import { tradeCloseRfq, tradeOpenRfq } from './services/rfq';
+import { primeRfqAccountCache, tradeCloseRfq, tradeOpenRfq } from './services/rfq';
 import { shortTxHash, txExplorerUrl } from './services/explorer';
 import { getOpenTradeStatus } from './services/tradeResult';
 import useWalletStore from './stores/walletStore';
 import useMarketStore from './stores/marketStore';
 import useSessionStore from './stores/sessionStore';
+
+function latestCachedPrice(marketId, fallback = null) {
+  const state = useMarketStore.getState();
+  return state.prices[marketId]
+    || state.markets.find(market => market.marketId === marketId)?.price
+    || fallback;
+}
 
 export default function App() {
   const [view, setView] = useState('home');
@@ -85,6 +92,13 @@ export default function App() {
     useSessionStore.getState().refresh(injAddress);
   }, [injAddress]);
 
+  useEffect(() => {
+    if (!connected || !injAddress || !session.rfqReady) return;
+    primeRfqAccountCache(injAddress).catch((err) => {
+      console.warn('RFQ account cache warmup failed:', err.message || err);
+    });
+  }, [connected, injAddress, session.rfqReady]);
+
   // Start polling when wallet connects
   useEffect(() => {
     if (connected && injAddress) {
@@ -136,6 +150,8 @@ export default function App() {
         stakeUsdt: pendingBet.stake,
         leverage: pendingBet.leverage,
         tpPrice: pendingBet.targetPrice,
+        market: pendingBet.market,
+        oraclePrice: latestCachedPrice(pendingBet.market.marketId, pendingBet.market.price),
         onProgress: ({ phase, result: progressResult }) => {
           if (phase === 'matched') {
             setTxStatus({ type: 'loading', message: 'Order matched.' });
@@ -181,6 +197,10 @@ export default function App() {
         marketId: position.marketId,
         side: position.side,
         quantity: position.quantity,
+        market: position.market,
+        oraclePrice: position.markPrice
+          || position.currentPrice
+          || latestCachedPrice(position.marketId, position.market?.price),
         onProgress: ({ phase, result: progressResult }) => {
           if (phase === 'matched') {
             setTxStatus({ type: 'loading', message: 'Cash-out order matched' });
@@ -217,6 +237,10 @@ export default function App() {
           marketId: pos.marketId,
           side: pos.side,
           quantity: pos.quantity,
+          market: pos.market,
+          oraclePrice: pos.markPrice
+            || pos.currentPrice
+            || latestCachedPrice(pos.marketId, pos.market?.price),
         });
         ok += 1;
       } catch (err) {

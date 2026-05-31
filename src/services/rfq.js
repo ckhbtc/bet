@@ -50,11 +50,13 @@ const GRPC_COMPRESSION_TRAILER = 128;
 const MAX_QUOTES_PER_ACCEPT = 8;
 const NETWORK = Network.MainnetSentry;
 const RFQ_TIMING_PREFIX = '[RFQ-TIMING]';
+const RFQ_ACCOUNT_DETAILS_TTL_MS = 5 * 60_000;
 const endpoints = getNetworkEndpoints(NETWORK);
 const authApi = new ChainGrpcAuthApi(endpoints.grpc);
 const txApi = new TxGrpcApi(endpoints.grpc);
 const rfqGatewayApi = new IndexerGrpcRfqGwApi(RFQ_GATEWAY_URL);
 const textDecoder = new TextDecoder();
+const rfqAccountDetailsCache = new Map();
 
 function randomId() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
@@ -294,6 +296,138 @@ async function fetchAccountDetailsNoThrow(address) {
   } catch {
     return null;
   }
+}
+
+function accountCacheKey(address) {
+  return String(address || '').toLowerCase();
+}
+
+function cloneAccountDetails(accountDetails) {
+  if (!accountDetails) return null;
+  return {
+    ...accountDetails,
+    baseAccount: accountDetails.baseAccount
+      ? { ...accountDetails.baseAccount }
+      : accountDetails.baseAccount,
+  };
+}
+
+function rememberRfqAccountDetails(address, accountDetails) {
+  const key = accountCacheKey(address);
+  const account = accountDetails?.baseAccount;
+  if (!key || !account) return;
+  rfqAccountDetailsCache.set(key, {
+    accountDetails: cloneAccountDetails(accountDetails),
+    ts: Date.now(),
+  });
+}
+
+function readCachedRfqAccountDetails(address) {
+  const key = accountCacheKey(address);
+  if (!key) return null;
+  const cached = rfqAccountDetailsCache.get(key);
+  if (!cached) return null;
+  if (Date.now() - cached.ts > RFQ_ACCOUNT_DETAILS_TTL_MS) {
+    rfqAccountDetailsCache.delete(key);
+    return null;
+  }
+  return cloneAccountDetails(cached.accountDetails);
+}
+
+function advanceCachedRfqAccountSequence(address) {
+  const key = accountCacheKey(address);
+  const cached = key ? rfqAccountDetailsCache.get(key) : null;
+  const baseAccount = cached?.accountDetails?.baseAccount;
+  const sequence = optionalNumber(baseAccount?.sequence);
+  if (!baseAccount || sequence === undefined) return null;
+  baseAccount.sequence = sequence + 1;
+  cached.ts = Date.now();
+  return baseAccount.sequence;
+}
+
+export function invalidateRfqAccountCache(address = null) {
+  if (!address) {
+    rfqAccountDetailsCache.clear();
+    return;
+  }
+  rfqAccountDetailsCache.delete(accountCacheKey(address));
+}
+
+export async function primeRfqAccountCache(granterAddress) {
+  const session = requireSession(granterAddress);
+  const privateKey = PrivateKey.fromHex(session.privateKeyHex);
+  const address = privateKey.toBech32();
+  const cached = readCachedRfqAccountDetails(address);
+  if (cached) return { accountDetails: cached, source: 'cache' };
+  const accountDetails = await fetchAccountDetailsNoThrow(address);
+  rememberRfqAccountDetails(address, accountDetails);
+  return { accountDetails, source: 'network' };
+}
+
+async function getRfqAccountDetailsForPrepare(address) {
+  const cached = readCachedRfqAccountDetails(address);
+  if (cached) return { accountDetails: cached, source: 'cache' };
+  const accountDetails = await fetchAccountDetailsNoThrow(address);
+  rememberRfqAccountDetails(address, accountDetails);
+  return { accountDetails, source: 'network' };
+}
+
+function marketHasTradingFields(market, marketId) {
+  if (!market || String(market.marketId || '') !== String(marketId || '')) return false;
+  return Boolean(market.minPriceTickSize && market.minQuantityTickSize && market.initialMarginRatio);
+}
+
+function normalizePositiveDecimal(value) {
+  if (value === null || value === undefined || value === '') return null;
+  try {
+    const decimal = new Decimal(value);
+    return decimal.isFinite() && decimal.gt(0) ? decimal : null;
+  } catch {
+    return null;
+  }
+}
+
+async function resolveRfqMarket({ marketId, providedMarket = null, timing = null }) {
+  if (marketHasTradingFields(providedMarket, marketId)) {
+    markRfqTiming(timing, 'preflight.market.cached', {
+      ticker: providedMarket.ticker ?? providedMarket.symbol ?? null,
+    });
+    return providedMarket;
+  }
+
+  const started = timingNow();
+  markRfqTiming(timing, 'preflight.market.start');
+  const market = await getMarket(marketId);
+  markRfqTiming(timing, 'preflight.market.end', {
+    source: 'network',
+    marketMs: roundMs(timingNow() - started),
+    ticker: market.ticker ?? market.symbol ?? null,
+  });
+  return market;
+}
+
+async function resolveRfqOraclePrice({
+  market,
+  providedOraclePrice = null,
+  timing = null,
+}) {
+  const cachedPrice = normalizePositiveDecimal(providedOraclePrice);
+  if (cachedPrice) {
+    markRfqTiming(timing, 'preflight.oracle.cached', {
+      oraclePrice: cachedPrice.toFixed(),
+    });
+    return cachedPrice;
+  }
+
+  const started = timingNow();
+  markRfqTiming(timing, 'preflight.oracle.start');
+  const oraclePrice = await fetchOraclePriceForMarket(market);
+  markRfqTiming(timing, 'preflight.oracle.end', {
+    source: 'network',
+    oracleMs: roundMs(timingNow() - started),
+    oraclePrice: oraclePrice.toFixed(),
+  });
+  return oraclePrice;
 }
 
 export function quantizeDecimal(value, tick, rounding = Decimal.ROUND_FLOOR) {
@@ -1190,11 +1324,14 @@ export async function executeRfqGatewayAutoSign({
 
   try {
     const privateKey = PrivateKey.fromHex(session.privateKeyHex);
+    const autosignAddress = privateKey.toBech32();
     markRfqTiming(activeTiming, 'account.fetch.start', {
-      autosignAddress: session.granteeAddress,
+      autosignAddress,
     });
-    const accountDetails = await fetchAccountDetailsNoThrow(privateKey.toBech32());
+    const accountLookup = await getRfqAccountDetailsForPrepare(autosignAddress);
+    const accountDetails = accountLookup.accountDetails;
     markRfqTiming(activeTiming, 'account.fetch.end', {
+      source: accountLookup.source,
       accountFound: Boolean(accountDetails?.baseAccount),
       sequence: accountDetails?.baseAccount?.sequence ?? null,
     });
@@ -1270,6 +1407,12 @@ export async function executeRfqGatewayAutoSign({
       txHash: result.txHash,
       broadcastPath: result.broadcastPath ?? null,
     });
+    const nextSequence = advanceCachedRfqAccountSequence(autosignAddress);
+    if (nextSequence !== null) {
+      markRfqTiming(activeTiming, 'account.cache.advance', {
+        sequence: nextSequence,
+      });
+    }
     onProgress?.({ phase: 'confirmed', prepared, result });
 
     if (ownsTiming) {
@@ -1286,6 +1429,12 @@ export async function executeRfqGatewayAutoSign({
     };
   } catch (err) {
     markRfqTiming(activeTiming, 'error', { message: err.message });
+    try {
+      const privateKey = PrivateKey.fromHex(session.privateKeyHex);
+      invalidateRfqAccountCache(privateKey.toBech32());
+    } catch {
+      // best effort only
+    }
     if (ownsTiming) {
       flushRfqTiming(activeTiming, 'error', { message: err.message });
     }
@@ -1365,6 +1514,8 @@ export async function tradeOpenRfq({
   leverage,
   slippage = 0.01,
   tpPrice = null,
+  market: providedMarket = null,
+  oraclePrice: providedOraclePrice = null,
   onProgress = null,
 }) {
   const timing = createRfqTiming('rfq-open', {
@@ -1378,19 +1529,15 @@ export async function tradeOpenRfq({
   }
 
   try {
-    const preflightStarted = timingNow();
-    markRfqTiming(timing, 'preflight.market.start');
-    const market = await getMarket(marketId);
-    markRfqTiming(timing, 'preflight.market.end', {
-      marketMs: roundMs(timingNow() - preflightStarted),
-      ticker: market.ticker ?? market.symbol ?? null,
+    const market = await resolveRfqMarket({
+      marketId,
+      providedMarket,
+      timing,
     });
-    const oracleStarted = timingNow();
-    markRfqTiming(timing, 'preflight.oracle.start');
-    const oraclePrice = await fetchOraclePriceForMarket(market);
-    markRfqTiming(timing, 'preflight.oracle.end', {
-      oracleMs: roundMs(timingNow() - oracleStarted),
-      oraclePrice,
+    const oraclePrice = await resolveRfqOraclePrice({
+      market,
+      providedOraclePrice,
+      timing,
     });
     const input = buildRfqOrderInput({ market, oraclePrice, side, stakeUsdt, leverage, slippage });
     markRfqTiming(timing, 'input.ready', {
@@ -1468,6 +1615,8 @@ export async function tradeCloseRfq({
   side,
   quantity,
   slippage = 0.02,
+  market: providedMarket = null,
+  oraclePrice: providedOraclePrice = null,
   onProgress = null,
 }) {
   const timing = createRfqTiming('rfq-cash-out', {
@@ -1481,19 +1630,15 @@ export async function tradeCloseRfq({
   }
 
   try {
-    const marketStarted = timingNow();
-    markRfqTiming(timing, 'preflight.market.start');
-    const market = await getMarket(marketId);
-    markRfqTiming(timing, 'preflight.market.end', {
-      marketMs: roundMs(timingNow() - marketStarted),
-      ticker: market.ticker ?? market.symbol ?? null,
+    const market = await resolveRfqMarket({
+      marketId,
+      providedMarket,
+      timing,
     });
-    const oracleStarted = timingNow();
-    markRfqTiming(timing, 'preflight.oracle.start');
-    const oraclePrice = await fetchOraclePriceForMarket(market);
-    markRfqTiming(timing, 'preflight.oracle.end', {
-      oracleMs: roundMs(timingNow() - oracleStarted),
-      oraclePrice,
+    const oraclePrice = await resolveRfqOraclePrice({
+      market,
+      providedOraclePrice,
+      timing,
     });
     const input = buildRfqCloseInput({ market, oraclePrice, side, quantity, slippage });
     markRfqTiming(timing, 'input.ready', {
@@ -1512,9 +1657,19 @@ export async function tradeCloseRfq({
     try {
       const cleanupStarted = timingNow();
       markRfqTiming(timing, 'cleanup.reduce_only.start');
-      await cleanupReduceOnlyOrdersForMarket({ session, market });
+      const cleanupResult = await cleanupReduceOnlyOrdersForMarket({ session, market });
+      if (Number(cleanupResult?.cancelled || 0) > 0) {
+        const nextSequence = advanceCachedRfqAccountSequence(session.granteeAddress);
+        if (nextSequence !== null) {
+          markRfqTiming(timing, 'account.cache.advance', {
+            source: 'reduce_only_cleanup',
+            sequence: nextSequence,
+          });
+        }
+      }
       markRfqTiming(timing, 'cleanup.reduce_only.end', {
         cleanupMs: roundMs(timingNow() - cleanupStarted),
+        cancelled: cleanupResult?.cancelled ?? 0,
       });
     } catch (err) {
       console.warn('cash-out reduce-only cleanup failed after close succeeded:', err.message);
@@ -1523,9 +1678,20 @@ export async function tradeCloseRfq({
     try {
       const cleanupStarted = timingNow();
       markRfqTiming(timing, 'cleanup.conditional.start');
-      await cancelActiveConditionalOrdersForMarket({ session, marketId: market.marketId });
+      const cleanupResult = await cancelActiveConditionalOrdersForMarket({ session, marketId: market.marketId });
+      if (cleanupResult?.txHash) {
+        const nextSequence = advanceCachedRfqAccountSequence(session.granteeAddress);
+        if (nextSequence !== null) {
+          markRfqTiming(timing, 'account.cache.advance', {
+            source: 'conditional_cleanup',
+            sequence: nextSequence,
+          });
+        }
+      }
       markRfqTiming(timing, 'cleanup.conditional.end', {
         cleanupMs: roundMs(timingNow() - cleanupStarted),
+        skipped: Boolean(cleanupResult?.skipped),
+        txHash: cleanupResult?.txHash ?? null,
       });
     } catch (err) {
       console.warn('cash-out conditional cleanup failed after close succeeded:', err.message);

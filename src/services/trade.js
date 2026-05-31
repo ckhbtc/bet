@@ -128,6 +128,7 @@ export async function placeTakeProfitOrder({ session, market, isLong, quantity, 
 
 export async function cleanupReduceOnlyOrdersForMarket({ session, market }) {
   const subaccountId = Address.fromHex(session.ethAddress).getSubaccountId(0);
+  let cancelled = 0;
 
   try {
     const { orders } = await derivativesApi.fetchOrders({ subaccountId, marketId: market.marketId });
@@ -142,6 +143,7 @@ export async function cleanupReduceOnlyOrdersForMarket({ session, market }) {
       });
       try {
         await broadcastViaAuthz([cancelMsg], session);
+        cancelled += 1;
       } catch (err) {
         console.warn('cancel failed for', o.orderHash, '-', err.message);
       }
@@ -149,6 +151,8 @@ export async function cleanupReduceOnlyOrdersForMarket({ session, market }) {
   } catch (err) {
     console.warn('order lookup for cancel failed:', err.message);
   }
+
+  return { cancelled };
 }
 
 // ─── Open trade (market order) + optional reduce-only TP limit ─────────────
