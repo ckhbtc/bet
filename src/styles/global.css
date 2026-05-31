@@ -239,7 +239,7 @@ input[type="number"] {
 .tx-loading-track {
   display: flex;
   width: max-content;
-  animation: tx-ribbon-scroll 5.5s linear infinite;
+  animation: tx-ribbon-scroll var(--tx-ribbon-duration, 5.5s) linear infinite;
   will-change: transform;
 }
 

@@ -13,6 +13,12 @@ function phaseLabels(message) {
   return ['SUBMIT', 'MATCH', 'CONFIRM'];
 }
 
+function ribbonDuration(message) {
+  const lower = String(message || '').toLowerCase();
+  if (lower.includes('take profit') || lower.includes('wallet')) return '12s';
+  return '5.5s';
+}
+
 function StatusTxLink({ txHash }) {
   if (!txHash) return null;
 
@@ -33,6 +39,7 @@ function StatusTxLink({ txHash }) {
 function LoadingStatus({ status }) {
   const text = bannerText(status.message);
   const phases = phaseLabels(status.message);
+  const duration = ribbonDuration(status.message);
 
   return (
     <div
@@ -42,7 +49,10 @@ function LoadingStatus({ status }) {
       aria-label={status.message}
     >
       <div className="tx-loading-ribbon" aria-hidden="true">
-        <div className="tx-loading-track">
+        <div
+          className="tx-loading-track"
+          style={{ '--tx-ribbon-duration': duration }}
+        >
           {Array.from({ length: 8 }).map((_, index) => (
             <span className="tx-loading-word" key={index}>
               {text}
