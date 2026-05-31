@@ -40,6 +40,10 @@ router.post('/relay-mint', async (req, res) => {
 router.post('/rfq-broadcast', async (req, res) => {
   try {
     const { txBytes } = req.body || {};
+    console.info('[RFQ-TIMING] relay.received', JSON.stringify({
+      at: new Date().toISOString(),
+      txBytes: typeof txBytes === 'string' ? txBytes.length : 0,
+    }));
     const result = await relayRfqBroadcast({ txBytes });
     res.json({ ok: true, txHash: result.txHash, relayMs: result.relayMs });
   } catch (err) {

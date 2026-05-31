@@ -1044,6 +1044,7 @@ export async function relaySignedRfqTxRaw(txRaw) {
 function directBroadcastSignedRfqTxRaw({ txRaw, txApiClient, timing = null }) {
   return new Promise((resolve, reject) => {
     const started = timingNow();
+    markRfqTiming(timing, 'broadcast.direct.start');
     txApiClient.broadcast(txRaw, {
       onBroadcast: (txHash) => {
         resolve({
@@ -1075,10 +1076,10 @@ export async function broadcastSignedRfqTxRaw({
   timing = null,
 }) {
   markRfqTiming(timing, 'broadcast.start');
-  const directBroadcast = directBroadcastSignedRfqTxRaw({ txRaw, txApiClient, timing });
-  const attempts = [directBroadcast];
+  const attempts = [];
   if (relayBroadcast) {
     const relayStarted = timingNow();
+    markRfqTiming(timing, 'broadcast.relay.start');
     attempts.unshift(
       relayBroadcast(txRaw).then((response) => ({
         ...response,
@@ -1091,6 +1092,7 @@ export async function broadcastSignedRfqTxRaw({
       })
     );
   }
+  attempts.push(directBroadcastSignedRfqTxRaw({ txRaw, txApiClient, timing }));
   const accepted = await firstSuccessful(attempts);
   markRfqTiming(timing, 'broadcast.accepted', {
     path: accepted.broadcastPath || 'unknown',
