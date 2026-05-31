@@ -48,4 +48,22 @@ router.post('/rfq-broadcast', async (req, res) => {
   }
 });
 
+router.post('/rfq-timing', (req, res) => {
+  const body = req.body || {};
+  const safe = {
+    receivedAt: new Date().toISOString(),
+    id: String(body.id || '').slice(0, 80),
+    flow: String(body.flow || '').slice(0, 40),
+    status: String(body.status || '').slice(0, 40),
+    marketId: String(body.marketId || '').slice(0, 90),
+    side: String(body.side || '').slice(0, 12),
+    direction: String(body.direction || '').slice(0, 12),
+    totalMs: Number.isFinite(Number(body.totalMs)) ? Number(body.totalMs) : null,
+    details: body.details || null,
+    marks: Array.isArray(body.marks) ? body.marks.slice(0, 40) : [],
+  };
+  console.info('[RFQ-TIMING] client', JSON.stringify(safe));
+  res.json({ ok: true });
+});
+
 export default router;

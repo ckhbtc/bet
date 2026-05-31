@@ -1,6 +1,7 @@
 const DEFAULT_LCD_URLS = ['https://sentry.lcd.injective.network'];
 const DEFAULT_RPC_URLS = ['https://sentry.tm.injective.network'];
 const TX_BYTES_RE = /^[A-Za-z0-9+/]+={0,2}$/;
+const RFQ_TIMING_PREFIX = '[RFQ-TIMING]';
 
 function configuredUrls(envKey, defaults) {
   const configured = (process.env[envKey] || '')
@@ -88,14 +89,28 @@ async function postRpcBroadcast(url, txBytes) {
 
 export async function relayRfqBroadcast({ txBytes }) {
   validateTxBytes(txBytes);
+  const started = Date.now();
   const attempts = [
     ...rpcBroadcastUrls().map((url) => postRpcBroadcast(url, txBytes)),
     ...lcdBroadcastUrls().map((url) => postBroadcast(url, txBytes)),
   ];
   try {
-    return await Promise.any(attempts);
+    const result = await Promise.any(attempts);
+    console.info(`${RFQ_TIMING_PREFIX} relay.accepted`, JSON.stringify({
+      at: new Date().toISOString(),
+      txHash: result.txHash,
+      endpoint: result.endpoint,
+      relayMs: result.relayMs,
+      totalMs: Date.now() - started,
+    }));
+    return result;
   } catch (err) {
     const messages = err?.errors?.map((error) => error.message).filter(Boolean) || [];
+    console.info(`${RFQ_TIMING_PREFIX} relay.error`, JSON.stringify({
+      at: new Date().toISOString(),
+      totalMs: Date.now() - started,
+      errors: messages,
+    }));
     throw new Error(messages.join('; ') || err.message || 'RFQ relay broadcast failed');
   }
 }

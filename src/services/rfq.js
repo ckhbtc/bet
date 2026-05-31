@@ -49,6 +49,7 @@ const GRPC_COMPRESSION_NONE = 0;
 const GRPC_COMPRESSION_TRAILER = 128;
 const MAX_QUOTES_PER_ACCEPT = 8;
 const NETWORK = Network.MainnetSentry;
+const RFQ_TIMING_PREFIX = '[RFQ-TIMING]';
 const endpoints = getNetworkEndpoints(NETWORK);
 const authApi = new ChainGrpcAuthApi(endpoints.grpc);
 const txApi = new TxGrpcApi(endpoints.grpc);
@@ -58,6 +59,133 @@ const textDecoder = new TextDecoder();
 function randomId() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
   return `rfq-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function timingNow() {
+  if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
+    return performance.now();
+  }
+  return Date.now();
+}
+
+function roundMs(value) {
+  return Math.round(Number(value || 0));
+}
+
+function createRfqTiming(flow, details = {}) {
+  const now = timingNow();
+  return {
+    id: randomId(),
+    flow,
+    startedAt: new Date().toISOString(),
+    startMs: now,
+    lastMs: now,
+    details,
+    marks: [],
+  };
+}
+
+function compactQuoteExpiryReport(report) {
+  if (!report) return null;
+  return {
+    ok: report.ok,
+    inspected: report.inspected,
+    quoteCount: report.quoteCount,
+    timestampQuoteCount: report.timestampQuoteCount,
+    shortestTtlMs: report.shortestTtlMs === null || report.shortestTtlMs === undefined
+      ? null
+      : roundMs(report.shortestTtlMs),
+    minTtlMs: report.minTtlMs,
+    unsafeQuotes: (report.unsafeQuotes || []).slice(0, 5).map((quote) => ({
+      index: quote.index,
+      maker: quote.maker ? `${quote.maker.slice(0, 10)}...${quote.maker.slice(-4)}` : '',
+      price: quote.price,
+      ttlMs: roundMs(quote.ttlMs),
+      expiryMs: quote.expiryMs,
+    })),
+  };
+}
+
+function compactPrepared(prepared, nowMs = Date.now()) {
+  if (!prepared) return null;
+  const quotes = prepared.quotes || [];
+  return {
+    rfqId: prepared.rfqId ?? null,
+    quoteCount: quotes.length,
+    quotesWaitMs: prepared.quotesWaitMs ?? null,
+    prices: quotes.slice(0, 5).map((quote) => quote.price),
+    quoteTtlsMs: quotes.slice(0, 5).map((quote) => {
+      const expiryMs = normalizeExpiryMs(quote.expiry?.timestamp);
+      return expiryMs > 0 ? roundMs(expiryMs - nowMs) : null;
+    }),
+  };
+}
+
+function safeTimingDetails(details = {}) {
+  const safe = { ...details };
+  delete safe.privateKeyHex;
+  delete safe.tx;
+  delete safe.feePayerSig;
+  return safe;
+}
+
+function markRfqTiming(timing, label, details = {}) {
+  if (!timing) return null;
+  const now = timingNow();
+  const mark = {
+    label,
+    at: new Date().toISOString(),
+    elapsedMs: roundMs(now - timing.startMs),
+    deltaMs: roundMs(now - timing.lastMs),
+    ...safeTimingDetails(details),
+  };
+  timing.lastMs = now;
+  timing.marks.push(mark);
+  console.info(`${RFQ_TIMING_PREFIX} ${timing.flow}.${label}`, {
+    id: timing.id,
+    flow: timing.flow,
+    ...timing.details,
+    ...mark,
+  });
+  return mark;
+}
+
+function postRfqTimingSummary(summary) {
+  if (typeof window === 'undefined') return;
+  const body = JSON.stringify(summary);
+  try {
+    if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+      const blob = new Blob([body], { type: 'application/json' });
+      if (navigator.sendBeacon('/api/rfq-timing', blob)) return;
+    }
+  } catch {
+    // Fall through to fetch.
+  }
+  if (typeof fetch !== 'function') return;
+  fetch('/api/rfq-timing', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body,
+    keepalive: true,
+  }).catch(() => {});
+}
+
+function flushRfqTiming(timing, status, details = {}) {
+  if (!timing || timing.flushed) return;
+  timing.flushed = true;
+  const summary = {
+    id: timing.id,
+    flow: timing.flow,
+    status,
+    startedAt: timing.startedAt,
+    finishedAt: new Date().toISOString(),
+    totalMs: roundMs(timingNow() - timing.startMs),
+    ...timing.details,
+    details: safeTimingDetails(details),
+    marks: timing.marks,
+  };
+  console.info(`${RFQ_TIMING_PREFIX} ${timing.flow}.${status}`, summary);
+  postRfqTimingSummary(summary);
 }
 
 function canonicalDecimal(value) {
@@ -896,6 +1024,7 @@ export async function signPreparedAutoSignTxRaw({
 export async function relaySignedRfqTxRaw(txRaw) {
   if (typeof fetch !== 'function') throw new Error('RFQ relay unavailable');
   const txBytes = uint8ArrayToBase64(CosmosTxV1Beta1TxPb.TxRaw.toBinary(txRaw));
+  const started = timingNow();
   const response = await fetch('/api/rfq-broadcast', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -905,22 +1034,37 @@ export async function relaySignedRfqTxRaw(txRaw) {
   if (!response.ok || !body?.ok || !body.txHash) {
     throw new Error(body?.error || `RFQ relay broadcast failed (${response.status})`);
   }
-  return { txHash: body.txHash };
+  return {
+    txHash: body.txHash,
+    relayMs: Number.isFinite(Number(body.relayMs)) ? Number(body.relayMs) : null,
+    clientRelayMs: roundMs(timingNow() - started),
+  };
 }
 
-function directBroadcastSignedRfqTxRaw({ txRaw, txApiClient }) {
+function directBroadcastSignedRfqTxRaw({ txRaw, txApiClient, timing = null }) {
   return new Promise((resolve, reject) => {
+    const started = timingNow();
     txApiClient.broadcast(txRaw, {
       onBroadcast: (txHash) => {
-        resolve({ txHash, confirmed: false });
+        resolve({
+          txHash,
+          confirmed: false,
+          broadcastPath: 'direct',
+          ackMs: roundMs(timingNow() - started),
+        });
       },
     }).then((response) => {
       resolve({
         txHash: response.txHash,
         txResponse: response,
         confirmed: true,
+        broadcastPath: 'direct',
+        ackMs: roundMs(timingNow() - started),
       });
-    }, reject);
+    }, (err) => {
+      markRfqTiming(timing, 'broadcast.direct.error', { message: err.message });
+      reject(err);
+    });
   });
 }
 
@@ -928,27 +1072,63 @@ export async function broadcastSignedRfqTxRaw({
   txRaw,
   txApiClient = txApi,
   relayBroadcast = relaySignedRfqTxRaw,
+  timing = null,
 }) {
-  const directBroadcast = directBroadcastSignedRfqTxRaw({ txRaw, txApiClient });
+  markRfqTiming(timing, 'broadcast.start');
+  const directBroadcast = directBroadcastSignedRfqTxRaw({ txRaw, txApiClient, timing });
   const attempts = [directBroadcast];
   if (relayBroadcast) {
-    attempts.unshift(relayBroadcast(txRaw).then((response) => ({
-      ...response,
-      confirmed: false,
-    })));
+    const relayStarted = timingNow();
+    attempts.unshift(
+      relayBroadcast(txRaw).then((response) => ({
+        ...response,
+        confirmed: false,
+        broadcastPath: 'relay',
+        ackMs: roundMs(timingNow() - relayStarted),
+      }), (err) => {
+        markRfqTiming(timing, 'broadcast.relay.error', { message: err.message });
+        throw err;
+      })
+    );
   }
   const accepted = await firstSuccessful(attempts);
+  markRfqTiming(timing, 'broadcast.accepted', {
+    path: accepted.broadcastPath || 'unknown',
+    txHash: accepted.txHash,
+    ackMs: accepted.ackMs ?? null,
+    relayMs: accepted.relayMs ?? null,
+    clientRelayMs: accepted.clientRelayMs ?? null,
+  });
   if (accepted.confirmed) {
+    markRfqTiming(timing, 'confirm.already_confirmed', {
+      path: accepted.broadcastPath || 'unknown',
+      txHash: accepted.txHash,
+    });
     return {
       txHash: accepted.txHash,
       txResponse: accepted.txResponse,
+      broadcastPath: accepted.broadcastPath || 'unknown',
+      ackMs: accepted.ackMs ?? null,
+      relayMs: accepted.relayMs ?? null,
     };
   }
 
+  const pollStarted = timingNow();
+  markRfqTiming(timing, 'confirm.poll.start', { txHash: accepted.txHash });
   const txResponse = await txApiClient.fetchTxPoll(accepted.txHash);
+  markRfqTiming(timing, 'confirm.poll.end', {
+    txHash: txResponse.txHash || accepted.txHash,
+    pollMs: roundMs(timingNow() - pollStarted),
+    height: txResponse.height ?? null,
+    code: txResponse.code ?? null,
+  });
   return {
     txHash: txResponse.txHash || accepted.txHash,
     txResponse,
+    broadcastPath: accepted.broadcastPath || 'unknown',
+    ackMs: accepted.ackMs ?? null,
+    relayMs: accepted.relayMs ?? null,
+    clientRelayMs: accepted.clientRelayMs ?? null,
   };
 }
 
@@ -957,7 +1137,10 @@ export async function broadcastPreparedRfqAutoSign({
   session,
   txApiClient = txApi,
   relayBroadcast = relaySignedRfqTxRaw,
+  timing = null,
 }) {
+  const signStarted = timingNow();
+  markRfqTiming(timing, 'sign.start');
   const txRaw = await signPreparedAutoSignTxRaw({
     tx: prepared.tx,
     feePayerSig: prepared.feePayerSig,
@@ -965,9 +1148,24 @@ export async function broadcastPreparedRfqAutoSign({
     accountNumber: prepared.autosignAccountNumber,
     feePayerPubKey: prepared.feePayerPubKey,
   });
+  markRfqTiming(timing, 'sign.end', {
+    signMs: roundMs(timingNow() - signStarted),
+    txBytes: CosmosTxV1Beta1TxPb.TxRaw.toBinary(txRaw).length,
+  });
 
-  const response = await broadcastSignedRfqTxRaw({ txRaw, txApiClient, relayBroadcast });
-  return { txHash: response.txHash };
+  const response = await broadcastSignedRfqTxRaw({
+    txRaw,
+    txApiClient,
+    relayBroadcast,
+    timing,
+  });
+  return {
+    txHash: response.txHash,
+    broadcastPath: response.broadcastPath,
+    ackMs: response.ackMs,
+    relayMs: response.relayMs,
+    clientRelayMs: response.clientRelayMs,
+  };
 }
 
 export async function executeRfqGatewayAutoSign({
@@ -980,58 +1178,117 @@ export async function executeRfqGatewayAutoSign({
   relayBroadcast = relaySignedRfqTxRaw,
   minQuoteTtlMs = RFQ_MIN_QUOTE_TTL_MS,
   maxPrepareAttempts = RFQ_PREPARE_MAX_ATTEMPTS,
+  timing = null,
 }) {
-  const privateKey = PrivateKey.fromHex(session.privateKeyHex);
-  const accountDetails = await fetchAccountDetailsNoThrow(privateKey.toBech32());
-  const request = buildRfqGatewayPrepareRequest({
-    session,
-    input,
+  const activeTiming = timing || createRfqTiming('rfq-execute', {
     marketId,
-    accountDetails,
+    direction: input.direction,
   });
+  const ownsTiming = !timing;
 
-  let prepared = null;
-  let lastFreshnessError = null;
-  for (let attempt = 1; attempt <= maxPrepareAttempts; attempt += 1) {
-    prepared = await gatewayApi.fetchPrepareAutoSign(request);
+  try {
+    const privateKey = PrivateKey.fromHex(session.privateKeyHex);
+    markRfqTiming(activeTiming, 'account.fetch.start', {
+      autosignAddress: session.granteeAddress,
+    });
+    const accountDetails = await fetchAccountDetailsNoThrow(privateKey.toBech32());
+    markRfqTiming(activeTiming, 'account.fetch.end', {
+      accountFound: Boolean(accountDetails?.baseAccount),
+      sequence: accountDetails?.baseAccount?.sequence ?? null,
+    });
+    const request = buildRfqGatewayPrepareRequest({
+      session,
+      input,
+      marketId,
+      accountDetails,
+    });
+    markRfqTiming(activeTiming, 'prepare.request.ready', {
+      quotesWaitTimeMs: request.quotesWaitTimeMs,
+      quantity: request.quantity,
+      margin: request.margin,
+      worstPrice: request.worstPrice,
+    });
 
-    if (!prepared?.tx?.length) {
-      throw new Error('RFQ gateway did not return a prepared settlement transaction');
-    }
-    if (!prepared.quotes?.length) {
-      throw new Error('No executable RFQ quote returned. RFQ gateway selected 0 quote(s).');
-    }
+    let prepared = null;
+    let lastFreshnessError = null;
+    for (let attempt = 1; attempt <= maxPrepareAttempts; attempt += 1) {
+      const prepareStarted = timingNow();
+      markRfqTiming(activeTiming, 'prepare.start', { attempt });
+      prepared = await gatewayApi.fetchPrepareAutoSign(request);
+      const expiryReport = prepared?.tx?.length
+        ? getPreparedQuoteExpiryReport(prepared, { minTtlMs: minQuoteTtlMs })
+        : null;
+      markRfqTiming(activeTiming, 'prepare.end', {
+        attempt,
+        prepareMs: roundMs(timingNow() - prepareStarted),
+        prepared: compactPrepared(prepared),
+        expiry: compactQuoteExpiryReport(expiryReport),
+      });
 
-    try {
-      assertPreparedQuoteFreshness(prepared, { minTtlMs: minQuoteTtlMs });
-      lastFreshnessError = null;
-      break;
-    } catch (err) {
-      lastFreshnessError = err;
-      prepared = null;
-      if (attempt < maxPrepareAttempts) {
-        await sleep(RFQ_PREPARE_RETRY_DELAY_MS);
+      if (!prepared?.tx?.length) {
+        throw new Error('RFQ gateway did not return a prepared settlement transaction');
+      }
+      if (!prepared.quotes?.length) {
+        throw new Error('No executable RFQ quote returned. RFQ gateway selected 0 quote(s).');
+      }
+
+      try {
+        assertPreparedQuoteFreshness(prepared, { minTtlMs: minQuoteTtlMs });
+        lastFreshnessError = null;
+        break;
+      } catch (err) {
+        lastFreshnessError = err;
+        markRfqTiming(activeTiming, 'prepare.freshness_retry', {
+          attempt,
+          message: err.message,
+        });
+        prepared = null;
+        if (attempt < maxPrepareAttempts) {
+          await sleep(RFQ_PREPARE_RETRY_DELAY_MS);
+        }
       }
     }
+
+    if (!prepared) {
+      throw lastFreshnessError || new Error('RFQ gateway did not return a fresh settlement transaction');
+    }
+    markRfqTiming(activeTiming, 'matched', {
+      prepared: compactPrepared(prepared),
+    });
+    onProgress?.({ phase: 'matched', prepared });
+
+    const result = await broadcastPreparedRfqAutoSign({
+      prepared,
+      session,
+      txApiClient,
+      relayBroadcast,
+      timing: activeTiming,
+    });
+    markRfqTiming(activeTiming, 'confirmed', {
+      txHash: result.txHash,
+      broadcastPath: result.broadcastPath ?? null,
+    });
+    onProgress?.({ phase: 'confirmed', prepared, result });
+
+    if (ownsTiming) {
+      flushRfqTiming(activeTiming, 'success', {
+        txHash: result.txHash,
+        prepared: compactPrepared(prepared),
+        broadcastPath: result.broadcastPath ?? null,
+      });
+    }
+
+    return {
+      ...result,
+      prepared,
+    };
+  } catch (err) {
+    markRfqTiming(activeTiming, 'error', { message: err.message });
+    if (ownsTiming) {
+      flushRfqTiming(activeTiming, 'error', { message: err.message });
+    }
+    throw err;
   }
-
-  if (!prepared) {
-    throw lastFreshnessError || new Error('RFQ gateway did not return a fresh settlement transaction');
-  }
-  onProgress?.({ phase: 'matched', prepared });
-
-  const result = await broadcastPreparedRfqAutoSign({
-    prepared,
-    session,
-    txApiClient,
-    relayBroadcast,
-  });
-  onProgress?.({ phase: 'confirmed', prepared, result });
-
-  return {
-    ...result,
-    prepared,
-  };
 }
 
 export function buildRfqOrderInput({ market, oraclePrice, side, stakeUsdt, leverage, slippage = 0.01 }) {
@@ -1108,56 +1365,99 @@ export async function tradeOpenRfq({
   tpPrice = null,
   onProgress = null,
 }) {
+  const timing = createRfqTiming('rfq-open', {
+    marketId,
+    side,
+  });
   const session = requireSession(granterAddress);
   if (Number(session.scopeVersion || 1) < AUTHZ_SCOPE_VERSION) {
+    flushRfqTiming(timing, 'error', { message: 'AuthZ scope upgrade required' });
     throw new Error('Trading needs updated autosign permissions. Revoke autosign, then authorize again.');
   }
 
-  const market = await getMarket(marketId);
-  const oraclePrice = await fetchOraclePriceForMarket(market);
-  const input = buildRfqOrderInput({ market, oraclePrice, side, stakeUsdt, leverage, slippage });
+  try {
+    const preflightStarted = timingNow();
+    markRfqTiming(timing, 'preflight.market.start');
+    const market = await getMarket(marketId);
+    markRfqTiming(timing, 'preflight.market.end', {
+      marketMs: roundMs(timingNow() - preflightStarted),
+      ticker: market.ticker ?? market.symbol ?? null,
+    });
+    const oracleStarted = timingNow();
+    markRfqTiming(timing, 'preflight.oracle.start');
+    const oraclePrice = await fetchOraclePriceForMarket(market);
+    markRfqTiming(timing, 'preflight.oracle.end', {
+      oracleMs: roundMs(timingNow() - oracleStarted),
+      oraclePrice,
+    });
+    const input = buildRfqOrderInput({ market, oraclePrice, side, stakeUsdt, leverage, slippage });
+    markRfqTiming(timing, 'input.ready', {
+      direction: input.direction,
+      quantity: input.quantity,
+      margin: input.margin,
+      worstPrice: input.worstPrice,
+    });
 
-  const openResult = await executeRfqGatewayAutoSign({
-    session,
-    marketId: market.marketId,
-    input,
-    onProgress,
-  });
+    const openResult = await executeRfqGatewayAutoSign({
+      session,
+      marketId: market.marketId,
+      input,
+      onProgress,
+      timing,
+    });
 
-  let takeProfit = tpPrice && Number(tpPrice) > 0
-    ? { requested: true, placed: false, error: null }
-    : { requested: false, placed: false, error: null };
+    let takeProfit = tpPrice && Number(tpPrice) > 0
+      ? { requested: true, placed: false, error: null }
+      : { requested: false, placed: false, error: null };
 
-  if (tpPrice && Number(tpPrice) > 0) {
-    try {
-      const tpResult = await submitTakeProfitIntent({
-        session,
-        market,
-        side,
-        quantity: input.quantity,
-        triggerPrice: tpPrice,
-      });
-      takeProfit = tpResult;
-    } catch (err) {
-      console.warn('RFQ conditional TP placement failed (open succeeded):', err.message);
-      takeProfit = {
-        requested: true,
-        placed: false,
-        error: err.message || 'Take-profit intent failed',
-      };
+    if (tpPrice && Number(tpPrice) > 0) {
+      const tpStarted = timingNow();
+      markRfqTiming(timing, 'take_profit.start', { triggerPrice: tpPrice });
+      try {
+        const tpResult = await submitTakeProfitIntent({
+          session,
+          market,
+          side,
+          quantity: input.quantity,
+          triggerPrice: tpPrice,
+        });
+        takeProfit = tpResult;
+        markRfqTiming(timing, 'take_profit.end', {
+          tpMs: roundMs(timingNow() - tpStarted),
+          placed: Boolean(tpResult?.placed),
+          txHash: tpResult?.txHash ?? null,
+        });
+      } catch (err) {
+        console.warn('RFQ conditional TP placement failed (open succeeded):', err.message);
+        markRfqTiming(timing, 'take_profit.error', { message: err.message });
+        takeProfit = {
+          requested: true,
+          placed: false,
+          error: err.message || 'Take-profit intent failed',
+        };
+      }
     }
-  }
 
-  return {
-    ...openResult,
-    takeProfit,
-    rfq: {
-      rfqId: openResult.prepared.rfqId,
-      quotesAccepted: openResult.prepared.quotes?.length ?? 0,
-      bestPrice: openResult.prepared.quotes?.[0]?.price ?? null,
-      quotesWaitMs: openResult.prepared.quotesWaitMs,
-    },
-  };
+    flushRfqTiming(timing, 'success', {
+      txHash: openResult.txHash,
+      prepared: compactPrepared(openResult.prepared),
+      takeProfit,
+    });
+
+    return {
+      ...openResult,
+      takeProfit,
+      rfq: {
+        rfqId: openResult.prepared.rfqId,
+        quotesAccepted: openResult.prepared.quotes?.length ?? 0,
+        bestPrice: openResult.prepared.quotes?.[0]?.price ?? null,
+        quotesWaitMs: openResult.prepared.quotesWaitMs,
+      },
+    };
+  } catch (err) {
+    flushRfqTiming(timing, 'error', { message: err.message });
+    throw err;
+  }
 }
 
 export async function tradeCloseRfq({
@@ -1168,39 +1468,86 @@ export async function tradeCloseRfq({
   slippage = 0.02,
   onProgress = null,
 }) {
+  const timing = createRfqTiming('rfq-cash-out', {
+    marketId,
+    side,
+  });
   const session = requireSession(granterAddress);
   if (Number(session.scopeVersion || 1) < AUTHZ_SCOPE_VERSION) {
+    flushRfqTiming(timing, 'error', { message: 'AuthZ scope upgrade required' });
     throw new Error('Trading needs updated autosign permissions. Revoke autosign, then authorize again.');
   }
 
-  const market = await getMarket(marketId);
-  const oraclePrice = await fetchOraclePriceForMarket(market);
-  const input = buildRfqCloseInput({ market, oraclePrice, side, quantity, slippage });
-  const closeResult = await executeRfqGatewayAutoSign({
-    session,
-    marketId: market.marketId,
-    input,
-    onProgress,
-  });
   try {
-    await cleanupReduceOnlyOrdersForMarket({ session, market });
-  } catch (err) {
-    console.warn('cash-out reduce-only cleanup failed after close succeeded:', err.message);
-  }
-  try {
-    await cancelActiveConditionalOrdersForMarket({ session, marketId: market.marketId });
-  } catch (err) {
-    console.warn('cash-out conditional cleanup failed after close succeeded:', err.message);
-  }
+    const marketStarted = timingNow();
+    markRfqTiming(timing, 'preflight.market.start');
+    const market = await getMarket(marketId);
+    markRfqTiming(timing, 'preflight.market.end', {
+      marketMs: roundMs(timingNow() - marketStarted),
+      ticker: market.ticker ?? market.symbol ?? null,
+    });
+    const oracleStarted = timingNow();
+    markRfqTiming(timing, 'preflight.oracle.start');
+    const oraclePrice = await fetchOraclePriceForMarket(market);
+    markRfqTiming(timing, 'preflight.oracle.end', {
+      oracleMs: roundMs(timingNow() - oracleStarted),
+      oraclePrice,
+    });
+    const input = buildRfqCloseInput({ market, oraclePrice, side, quantity, slippage });
+    markRfqTiming(timing, 'input.ready', {
+      direction: input.direction,
+      quantity: input.quantity,
+      margin: input.margin,
+      worstPrice: input.worstPrice,
+    });
+    const closeResult = await executeRfqGatewayAutoSign({
+      session,
+      marketId: market.marketId,
+      input,
+      onProgress,
+      timing,
+    });
+    try {
+      const cleanupStarted = timingNow();
+      markRfqTiming(timing, 'cleanup.reduce_only.start');
+      await cleanupReduceOnlyOrdersForMarket({ session, market });
+      markRfqTiming(timing, 'cleanup.reduce_only.end', {
+        cleanupMs: roundMs(timingNow() - cleanupStarted),
+      });
+    } catch (err) {
+      console.warn('cash-out reduce-only cleanup failed after close succeeded:', err.message);
+      markRfqTiming(timing, 'cleanup.reduce_only.error', { message: err.message });
+    }
+    try {
+      const cleanupStarted = timingNow();
+      markRfqTiming(timing, 'cleanup.conditional.start');
+      await cancelActiveConditionalOrdersForMarket({ session, marketId: market.marketId });
+      markRfqTiming(timing, 'cleanup.conditional.end', {
+        cleanupMs: roundMs(timingNow() - cleanupStarted),
+      });
+    } catch (err) {
+      console.warn('cash-out conditional cleanup failed after close succeeded:', err.message);
+      markRfqTiming(timing, 'cleanup.conditional.error', { message: err.message });
+    }
 
-  return {
-    ...closeResult,
-    rfq: {
-      rfqId: closeResult.prepared.rfqId,
-      quotesAccepted: closeResult.prepared.quotes?.length ?? 0,
-      bestPrice: closeResult.prepared.quotes?.[0]?.price ?? null,
-      quotesWaitMs: closeResult.prepared.quotesWaitMs,
-      reduceOnly: true,
-    },
-  };
+    flushRfqTiming(timing, 'success', {
+      txHash: closeResult.txHash,
+      prepared: compactPrepared(closeResult.prepared),
+      broadcastPath: closeResult.broadcastPath ?? null,
+    });
+
+    return {
+      ...closeResult,
+      rfq: {
+        rfqId: closeResult.prepared.rfqId,
+        quotesAccepted: closeResult.prepared.quotes?.length ?? 0,
+        bestPrice: closeResult.prepared.quotes?.[0]?.price ?? null,
+        quotesWaitMs: closeResult.prepared.quotesWaitMs,
+        reduceOnly: true,
+      },
+    };
+  } catch (err) {
+    flushRfqTiming(timing, 'error', { message: err.message });
+    throw err;
+  }
 }
