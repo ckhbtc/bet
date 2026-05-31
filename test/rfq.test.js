@@ -6,13 +6,17 @@ import {
   base64ToUint8Array,
   uint8ArrayToBase64,
 } from '@injectivelabs/sdk-ts';
+import { MsgExec as AuthzMsgExecPb } from '@injectivelabs/core-proto-ts-v2/generated/cosmos/authz/v1beta1/tx_pb.js';
+import { MsgExecuteContractCompat as WasmxMsgExecuteContractCompatPb } from '@injectivelabs/core-proto-ts-v2/generated/injective/wasmx/v1/tx_pb.js';
 import {
+  assertPreparedQuoteFreshness,
   buildAcceptQuoteMessage,
   buildRfqCloseInput,
   buildRfqGatewayPrepareRequest,
   buildRfqQuoteResult,
   buildRfqOrderInput,
   getRfqQuoteRejectReason,
+  getPreparedQuoteExpiryReport,
   getPreparedTxSignatureIndexes,
   normalizeRfqQuoteForContract,
   requestRfqQuotes,
@@ -34,6 +38,7 @@ import {
   RFQ_EVM_CHAIN_ID,
   RFQ_GRPC_WEB_URL,
   RFQ_COLLECT_QUOTES_MS,
+  RFQ_MIN_QUOTE_TTL_MS,
 } from '../src/services/rfqConstants.js';
 
 const market = {
@@ -64,6 +69,39 @@ function quote(overrides = {}) {
     minFillQuantity: '',
     ...overrides,
   };
+}
+
+function preparedTxWithQuotes(quotes) {
+  const acceptMsg = buildAcceptQuoteMessage({
+    sender: 'inj1sender',
+    rfqId: 12,
+    marketId: market.marketId,
+    direction: 'long',
+    margin: '50',
+    quantity: '5',
+    worstPrice: '101',
+    quotes,
+  });
+  const executeAny = {
+    typeUrl: '/injective.wasmx.v1.MsgExecuteContractCompat',
+    value: WasmxMsgExecuteContractCompatPb.toBinary(acceptMsg.toProto()),
+  };
+  const exec = AuthzMsgExecPb.create({
+    grantee: 'inj1grantee',
+    msgs: [executeAny],
+  });
+  const body = CosmosTxV1Beta1TxPb.TxBody.create({
+    messages: [{
+      typeUrl: '/cosmos.authz.v1beta1.MsgExec',
+      value: AuthzMsgExecPb.toBinary(exec),
+    }],
+  });
+  const txRaw = CosmosTxV1Beta1TxPb.TxRaw.create({
+    bodyBytes: CosmosTxV1Beta1TxPb.TxBody.toBinary(body),
+    authInfoBytes: new Uint8Array(),
+    signatures: [],
+  });
+  return CosmosTxV1Beta1TxPb.TxRaw.toBinary(txRaw);
 }
 
 test('buildRfqOrderInput formats human RFQ decimals from market ticks', () => {
@@ -248,6 +286,53 @@ test('normalizeRfqQuoteForContract emits the accept_quote quote shape', () => {
     maker_subaccount_nonce: 7,
     min_fill_quantity: '1.5',
   });
+});
+
+test('getPreparedQuoteExpiryReport flags prepared RFQ quotes inside the block-safety window', () => {
+  const nowMs = 1_770_000_000_000;
+  const prepared = {
+    tx: preparedTxWithQuotes([
+      quote({ expiry: { timestamp: nowMs + 1_000, height: 0 }, price: '100' }),
+      quote({ expiry: { timestamp: nowMs + 7_000, height: 0 }, price: '100.1' }),
+    ]),
+  };
+
+  const report = getPreparedQuoteExpiryReport(prepared, {
+    nowMs,
+    minTtlMs: RFQ_MIN_QUOTE_TTL_MS,
+  });
+
+  assert.equal(report.ok, false);
+  assert.equal(report.inspected, true);
+  assert.equal(report.quoteCount, 2);
+  assert.equal(report.unsafeQuotes.length, 1);
+  assert.equal(report.shortestTtlMs, 1_000);
+  assert.throws(
+    () => assertPreparedQuoteFreshness(prepared, { nowMs, minTtlMs: RFQ_MIN_QUOTE_TTL_MS }),
+    /RFQ quotes expire too soon \(1000ms left; need 4000ms\)/
+  );
+});
+
+test('getPreparedQuoteExpiryReport accepts prepared RFQ quotes with enough expiry buffer', () => {
+  const nowMs = 1_770_000_000_000;
+  const prepared = {
+    tx: preparedTxWithQuotes([
+      quote({ expiry: { timestamp: nowMs + 4_500, height: 0 }, price: '100' }),
+      quote({ expiry: { timestamp: nowMs + 7_000, height: 0 }, price: '100.1' }),
+    ]),
+  };
+
+  const report = getPreparedQuoteExpiryReport(prepared, {
+    nowMs,
+    minTtlMs: RFQ_MIN_QUOTE_TTL_MS,
+  });
+
+  assert.equal(report.ok, true);
+  assert.equal(report.quoteCount, 2);
+  assert.equal(report.unsafeQuotes.length, 0);
+  assert.doesNotThrow(
+    () => assertPreparedQuoteFreshness(prepared, { nowMs, minTtlMs: RFQ_MIN_QUOTE_TTL_MS })
+  );
 });
 
 test('signPreparedAutoSignTxRaw signs the autosign slot and preserves fee payer sig', async () => {

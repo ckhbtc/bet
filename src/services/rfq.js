@@ -11,6 +11,8 @@ import {
   uint8ArrayToBase64,
   uint8ArrayToHex,
 } from '@injectivelabs/sdk-ts';
+import { MsgExec as AuthzMsgExecPb } from '@injectivelabs/core-proto-ts-v2/generated/cosmos/authz/v1beta1/tx_pb.js';
+import { MsgExecuteContractCompat as WasmxMsgExecuteContractCompatPb } from '@injectivelabs/core-proto-ts-v2/generated/injective/wasmx/v1/tx_pb.js';
 import { getNetworkEndpoints, Network } from '@injectivelabs/networks';
 import {
   CreateRFQRequestType,
@@ -23,6 +25,9 @@ import {
   RFQ_CONTRACT_ADDRESS,
   RFQ_EVM_CHAIN_ID,
   RFQ_GATEWAY_URL,
+  RFQ_MIN_QUOTE_TTL_MS,
+  RFQ_PREPARE_MAX_ATTEMPTS,
+  RFQ_PREPARE_RETRY_DELAY_MS,
   RFQ_REQUEST_TIMEOUT_MS,
   RFQ_WS_URL,
 } from './rfqConstants.js';
@@ -48,6 +53,7 @@ const endpoints = getNetworkEndpoints(NETWORK);
 const authApi = new ChainGrpcAuthApi(endpoints.grpc);
 const txApi = new TxGrpcApi(endpoints.grpc);
 const rfqGatewayApi = new IndexerGrpcRfqGwApi(RFQ_GATEWAY_URL);
+const textDecoder = new TextDecoder();
 
 function randomId() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
@@ -79,6 +85,10 @@ function bytesToBase64(bytes) {
     return btoa(binary);
   }
   return Buffer.from(bytes).toString('base64');
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function extractRawPubKeyBytes(value) {
@@ -655,6 +665,101 @@ export function buildAcceptQuoteMessage({
   });
 }
 
+function normalizeExpiryMs(value) {
+  const expiry = Number(value || 0);
+  if (!Number.isFinite(expiry) || expiry <= 0) return 0;
+  return expiry < 10_000_000_000 ? expiry * 1000 : expiry;
+}
+
+function decodeExecuteContractCompatMsg(anyMessage) {
+  const typeUrl = String(anyMessage?.typeUrl || '');
+  if (!typeUrl.endsWith('injective.wasmx.v1.MsgExecuteContractCompat')) return null;
+  const execute = WasmxMsgExecuteContractCompatPb.fromBinary(anyMessage.value);
+  if (!execute?.msg?.length) return null;
+  const message = typeof execute.msg === 'string'
+    ? execute.msg
+    : textDecoder.decode(execute.msg);
+  return JSON.parse(message);
+}
+
+function extractAcceptQuoteMessagesFromAny(anyMessage) {
+  const typeUrl = String(anyMessage?.typeUrl || '');
+  if (typeUrl.endsWith('cosmos.authz.v1beta1.MsgExec')) {
+    const exec = AuthzMsgExecPb.fromBinary(anyMessage.value);
+    return (exec.msgs || []).flatMap(extractAcceptQuoteMessagesFromAny);
+  }
+
+  const msg = decodeExecuteContractCompatMsg(anyMessage);
+  if (msg?.accept_quote) return [msg.accept_quote];
+  return [];
+}
+
+export function extractPreparedAcceptQuoteMessages(txBytes) {
+  const txRaw = CosmosTxV1Beta1TxPb.TxRaw.fromBinary(txBytes);
+  const txBody = CosmosTxV1Beta1TxPb.TxBody.fromBinary(txRaw.bodyBytes);
+  return (txBody.messages || []).flatMap(extractAcceptQuoteMessagesFromAny);
+}
+
+export function getPreparedQuoteExpiryReport(prepared, {
+  nowMs = Date.now(),
+  minTtlMs = RFQ_MIN_QUOTE_TTL_MS,
+} = {}) {
+  let acceptQuotes = [];
+  try {
+    acceptQuotes = extractPreparedAcceptQuoteMessages(prepared.tx);
+  } catch (err) {
+    return {
+      ok: false,
+      inspected: false,
+      decodeError: err.message,
+      quoteCount: 0,
+      timestampQuoteCount: 0,
+      unsafeQuotes: [],
+      minTtlMs,
+    };
+  }
+
+  const quotes = acceptQuotes.flatMap((message) => message.quotes || []);
+  const timestampQuotes = quotes
+    .map((quote, index) => ({
+      index,
+      maker: quote.maker || '',
+      price: quote.price || '',
+      expiryMs: normalizeExpiryMs(quote.expiry?.ts ?? quote.expiry?.timestamp),
+    }))
+    .filter((quote) => quote.expiryMs > 0)
+    .map((quote) => ({
+      ...quote,
+      ttlMs: quote.expiryMs - nowMs,
+    }));
+  const unsafeQuotes = timestampQuotes.filter((quote) => quote.ttlMs < minTtlMs);
+  const shortestTtlMs = timestampQuotes.length
+    ? Math.min(...timestampQuotes.map((quote) => quote.ttlMs))
+    : null;
+
+  return {
+    ok: unsafeQuotes.length === 0,
+    inspected: true,
+    quoteCount: quotes.length,
+    timestampQuoteCount: timestampQuotes.length,
+    unsafeQuotes,
+    shortestTtlMs,
+    minTtlMs,
+  };
+}
+
+export function assertPreparedQuoteFreshness(prepared, options) {
+  const report = getPreparedQuoteExpiryReport(prepared, options);
+  if (!report.inspected) {
+    throw new Error(`RFQ settlement tx could not be inspected for quote expiry: ${report.decodeError}`);
+  }
+  if (!report.ok) {
+    const ttl = Math.max(0, Math.round(report.shortestTtlMs ?? 0));
+    throw new Error(`RFQ quotes expire too soon (${ttl}ms left; need ${report.minTtlMs}ms). Try again.`);
+  }
+  return report;
+}
+
 export function buildRfqGatewayPrepareRequest({
   session,
   input,
@@ -795,6 +900,8 @@ export async function executeRfqGatewayAutoSign({
   onProgress = null,
   gatewayApi = rfqGatewayApi,
   txApiClient = txApi,
+  minQuoteTtlMs = RFQ_MIN_QUOTE_TTL_MS,
+  maxPrepareAttempts = RFQ_PREPARE_MAX_ATTEMPTS,
 }) {
   const privateKey = PrivateKey.fromHex(session.privateKeyHex);
   const accountDetails = await fetchAccountDetailsNoThrow(privateKey.toBech32());
@@ -804,13 +911,34 @@ export async function executeRfqGatewayAutoSign({
     marketId,
     accountDetails,
   });
-  const prepared = await gatewayApi.fetchPrepareAutoSign(request);
 
-  if (!prepared?.tx?.length) {
-    throw new Error('RFQ gateway did not return a prepared settlement transaction');
+  let prepared = null;
+  let lastFreshnessError = null;
+  for (let attempt = 1; attempt <= maxPrepareAttempts; attempt += 1) {
+    prepared = await gatewayApi.fetchPrepareAutoSign(request);
+
+    if (!prepared?.tx?.length) {
+      throw new Error('RFQ gateway did not return a prepared settlement transaction');
+    }
+    if (!prepared.quotes?.length) {
+      throw new Error('No executable RFQ quote returned. RFQ gateway selected 0 quote(s).');
+    }
+
+    try {
+      assertPreparedQuoteFreshness(prepared, { minTtlMs: minQuoteTtlMs });
+      lastFreshnessError = null;
+      break;
+    } catch (err) {
+      lastFreshnessError = err;
+      prepared = null;
+      if (attempt < maxPrepareAttempts) {
+        await sleep(RFQ_PREPARE_RETRY_DELAY_MS);
+      }
+    }
   }
-  if (!prepared.quotes?.length) {
-    throw new Error('No executable RFQ quote returned. RFQ gateway selected 0 quote(s).');
+
+  if (!prepared) {
+    throw lastFreshnessError || new Error('RFQ gateway did not return a fresh settlement transaction');
   }
   onProgress?.({ phase: 'matched', prepared });
 
