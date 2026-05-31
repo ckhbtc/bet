@@ -15,8 +15,8 @@ import BetResult from './components/BetResult';
 import AuthZSetup from './components/AuthZSetup';
 import BridgeModal from './components/BridgeModal';
 import Confetti from './components/Confetti';
+import TransactionStatus from './components/TransactionStatus';
 import { primeRfqAccountCache, tradeCloseRfq, tradeOpenRfq } from './services/rfq';
-import { shortTxHash, txExplorerUrl } from './services/explorer';
 import { getOpenTradeStatus } from './services/tradeResult';
 import useWalletStore from './stores/walletStore';
 import useMarketStore from './stores/marketStore';
@@ -299,49 +299,7 @@ export default function App() {
 
       {/* Transaction status toast */}
       {confetti && <Confetti />}
-
-      {txStatus && (
-        <div style={{
-          position: 'fixed', top: 70, left: '50%', transform: 'translateX(-50%)',
-          zIndex: 300, padding: '12px 24px', borderRadius: 10,
-          background: txStatus.type === 'loading' ? 'var(--bg-card)'
-            : txStatus.type === 'success' ? 'var(--green-dim)'
-            : txStatus.type === 'warning' ? 'var(--accent-dim)'
-            : 'var(--red-dim)',
-          border: `1px solid ${txStatus.type === 'loading' ? 'var(--border)'
-            : txStatus.type === 'success' ? 'var(--green)'
-            : txStatus.type === 'warning' ? 'var(--accent)'
-            : 'var(--red)'}`,
-          color: txStatus.type === 'loading' ? 'var(--text-primary)'
-            : txStatus.type === 'success' ? 'var(--green)'
-            : txStatus.type === 'warning' ? 'var(--accent)'
-            : 'var(--red)',
-          fontSize: 13, fontWeight: 500, fontFamily: 'var(--font-heading)',
-          animation: 'slide-up 0.3s ease',
-          maxWidth: 400,
-        }}>
-          {txStatus.type === 'warning' && '! '}{txStatus.message}
-          {txStatus.txHash && (
-            <>
-              {' '}
-              <a
-                href={txExplorerUrl(txStatus.txHash)}
-                target="_blank"
-                rel="noopener noreferrer"
-                title={txStatus.txHash}
-                aria-label={`View transaction ${txStatus.txHash} on explorer`}
-                style={{
-                  color: 'inherit',
-                  textDecoration: 'underline',
-                  textUnderlineOffset: 3,
-                }}
-              >
-                Tx: {shortTxHash(txStatus.txHash)}
-              </a>
-            </>
-          )}
-        </div>
-      )}
+      <TransactionStatus status={txStatus} />
 
       <div style={{
         flex: 1, display: 'flex', maxWidth: 1200,
