@@ -1574,7 +1574,10 @@ export async function tradeOpenRfq({
         markRfqTiming(timing, 'take_profit.end', {
           tpMs: roundMs(timingNow() - tpStarted),
           placed: Boolean(tpResult?.placed),
-          txHash: tpResult?.txHash ?? null,
+          verified: Boolean(tpResult?.verified),
+          status: tpResult?.status ?? null,
+          rfqId: tpResult?.rfqId ?? null,
+          verificationError: tpResult?.verificationError ?? null,
         });
       } catch (err) {
         console.warn('RFQ conditional TP placement failed (open succeeded):', err.message);

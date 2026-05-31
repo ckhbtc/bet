@@ -4,11 +4,22 @@ export function shortenError(message, maxLength = 140) {
 }
 
 export function getOpenTradeStatus(result) {
-  const tpFailed = result?.takeProfit?.requested && !result.takeProfit?.placed;
+  const tpRequested = Boolean(result?.takeProfit?.requested);
+  const tpFailed = tpRequested && !result.takeProfit?.placed;
   if (tpFailed) {
     return {
       type: 'warning',
-      message: `Order confirmed. Take-profit failed: ${shortenError(result.takeProfit.error)}`,
+      message: `Open order confirmed. Take-profit failed: ${shortenError(result.takeProfit.error)}`,
+      txHash: result.txHash,
+    };
+  }
+
+  if (tpRequested) {
+    return {
+      type: 'success',
+      message: result.takeProfit?.verified
+        ? 'Open order confirmed. Take-profit order active.'
+        : 'Open order confirmed. Take-profit order accepted.',
       txHash: result.txHash,
     };
   }

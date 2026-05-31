@@ -63,9 +63,20 @@ const TRIGGER_KIND_BY_TYPE = {
   [RFQ_TPSL_TRIGGER.MARK_PRICE_LTE]: 2,
 };
 
+const ACTIVE_CONDITIONAL_ORDER_STATUS = 'pending_trigger';
+
 function randomId() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
   return `tpsl-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function scalarToString(value) {
+  if (value === null || value === undefined) return '';
+  return String(value);
 }
 
 function canonicalDecimal(value) {
@@ -214,6 +225,89 @@ export async function listActiveConditionalOrders({
   return (response.orders || []).filter(order => order.status === 'pending_trigger');
 }
 
+export function serializeConditionalOrder(order) {
+  if (!order) return null;
+  return {
+    rfqId: scalarToString(order.rfqId),
+    marketId: order.marketId || '',
+    direction: order.direction || '',
+    margin: order.margin || '',
+    quantity: order.quantity || '',
+    worstPrice: order.worstPrice || '',
+    requestAddress: order.requestAddress || '',
+    triggerPrice: order.triggerPrice || '',
+    status: order.status || '',
+    createdAt: scalarToString(order.createdAt),
+    updatedAt: scalarToString(order.updatedAt),
+    expiresAt: scalarToString(order.expiresAt),
+    triggerType: order.triggerType || '',
+    minTotalFillQuantity: order.minTotalFillQuantity || '',
+    eventTime: scalarToString(order.eventTime),
+    error: order.error || '',
+    txHash: order.txHash || '',
+    terminalAt: scalarToString(order.terminalAt),
+    evmChainId: scalarToString(order.evmChainId),
+    takerNonceTimeWindowMs: scalarToString(order.takerNonceTimeWindowMs),
+  };
+}
+
+export function conditionalOrderMatches(order, expected) {
+  const serialized = serializeConditionalOrder(order);
+  if (!serialized) return false;
+
+  if (serialized.rfqId !== scalarToString(expected.rfqId)) return false;
+  if (serialized.marketId !== expected.marketId) return false;
+  if (serialized.direction !== expected.direction) return false;
+  if (serialized.triggerPrice !== expected.triggerPrice) return false;
+  if (serialized.triggerType !== expected.triggerType) return false;
+  if (expected.taker && serialized.requestAddress && serialized.requestAddress !== expected.taker) return false;
+  return true;
+}
+
+export async function verifyConditionalOrderStored({
+  taker,
+  order,
+  rfqApiClient = rfqApi,
+  attempts = 3,
+  retryDelayMs = 200,
+}) {
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const response = await rfqApiClient.listConditionalOrders({
+        requestAddress: taker,
+        marketId: order.marketId,
+      });
+      const found = (response.orders || []).find(candidate => (
+        conditionalOrderMatches(candidate, { ...order, taker })
+      ));
+      if (found) {
+        const serialized = serializeConditionalOrder(found);
+        return {
+          verified: serialized.status === ACTIVE_CONDITIONAL_ORDER_STATUS,
+          order: serialized,
+          status: serialized.status,
+          attempts: attempt,
+          error: serialized.error || null,
+        };
+      }
+    } catch (err) {
+      lastError = err;
+    }
+
+    if (attempt < attempts) await sleep(retryDelayMs);
+  }
+
+  return {
+    verified: false,
+    order: null,
+    status: null,
+    attempts,
+    error: lastError?.message || 'Take-profit order was not found in RFQ conditional orders',
+  };
+}
+
 export async function cancelConditionalOrderLane({ session, marketId }) {
   const msg = MsgExecuteContractCompat.fromJSON({
     funds: [],
@@ -229,10 +323,15 @@ export async function cancelConditionalOrderLane({ session, marketId }) {
   return broadcastViaAuthz([msg], session);
 }
 
-export async function cancelActiveConditionalOrdersForMarket({ session, marketId }) {
+export async function cancelActiveConditionalOrdersForMarket({
+  session,
+  marketId,
+  rfqApiClient = rfqApi,
+}) {
   const activeOrders = await listActiveConditionalOrders({
     taker: session.granterAddress,
     marketId,
+    rfqApiClient,
   }).catch(() => []);
 
   if (activeOrders.length === 0) return { txHash: null, skipped: true };
@@ -300,6 +399,7 @@ export async function submitConditionalOrder({
   deadlineMs = Date.now() + RFQ_TPSL_DEADLINE_MS,
   cid = randomId(),
   rfqApiClient = rfqApi,
+  signIntent = signConditionalOrderIntent,
 }) {
   const intent = {
     cid,
@@ -321,10 +421,12 @@ export async function submitConditionalOrder({
     minTotalFillQuantity: order.minTotalFillQuantity,
     worstPrice: order.worstPrice,
   };
-  const signature = await signConditionalOrderIntent(intent, {
+  const signature = await signIntent(intent, {
     expectedEthAddress: session.ethAddress,
   });
-  return rfqApiClient.createConditionalOrder({
+  if (!signature) throw new Error('No take-profit signature returned by wallet');
+
+  const response = await rfqApiClient.createConditionalOrder({
     signature,
     signMode: 'v2',
     evmChainId: BigInt(RFQ_EVM_CHAIN_ID),
@@ -350,6 +452,12 @@ export async function submitConditionalOrder({
       takerNonceTimeWindowMs: BigInt(RFQ_TPSL_NONCE_WINDOW_MS),
     },
   });
+
+  return {
+    signed: true,
+    accepted: true,
+    order: serializeConditionalOrder(response?.order),
+  };
 }
 
 export async function submitTakeProfitIntent({
@@ -358,12 +466,19 @@ export async function submitTakeProfitIntent({
   side,
   quantity,
   triggerPrice,
+  rfqApiClient = rfqApi,
+  wasmApiClient = wasmApi,
 }) {
-  await cancelActiveConditionalOrdersForMarket({ session, marketId: market.marketId });
+  await cancelActiveConditionalOrdersForMarket({
+    session,
+    marketId: market.marketId,
+    rfqApiClient,
+  });
 
   const laneState = await fetchTakerIntentState({
     taker: session.granterAddress,
     marketId: market.marketId,
+    wasmApiClient,
   });
   const order = buildTpSlConditionalOrder({
     market,
@@ -372,17 +487,38 @@ export async function submitTakeProfitIntent({
     triggerPrice,
     kind: 'take_profit',
   });
-  const response = await submitConditionalOrder({
+  const submitResult = await submitConditionalOrder({
     session,
     order,
     laneState,
+    rfqApiClient,
   });
+  const verification = await verifyConditionalOrderStored({
+    taker: session.granterAddress,
+    order,
+    rfqApiClient,
+  });
+  const storedOrder = verification.order || submitResult.order;
+  const status = verification.status || submitResult.order?.status || ACTIVE_CONDITIONAL_ORDER_STATUS;
+
+  if (status && status !== ACTIVE_CONDITIONAL_ORDER_STATUS) {
+    throw new Error(`Take-profit order returned status ${status}`);
+  }
+  if (!submitResult.accepted && !verification.verified) {
+    throw new Error(verification.error || 'Take-profit order was signed but not accepted by RFQ');
+  }
 
   return {
     requested: true,
     placed: true,
+    signed: submitResult.signed,
+    accepted: submitResult.accepted,
+    verified: verification.verified,
+    status,
+    rfqId: scalarToString(order.rfqId),
     error: null,
     order,
-    response,
+    conditionalOrder: storedOrder,
+    verificationError: verification.verified ? null : verification.error,
   };
 }

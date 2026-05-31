@@ -4,7 +4,10 @@ import { getEthereumAddress } from '@injectivelabs/sdk-ts';
 import {
   buildSignedTakerIntentTypedData,
   buildTpSlConditionalOrder,
+  conditionalOrderMatches,
   fetchTakerIntentState,
+  serializeConditionalOrder,
+  verifyConditionalOrderStored,
 } from '../src/services/rfqConditional.js';
 import {
   RFQ_CONTRACT_ADDRESS,
@@ -145,4 +148,64 @@ test('fetchTakerIntentState parses contract lane counters', async () => {
   });
 
   assert.deepEqual(state, { epoch: 4, laneVersion: 7 });
+});
+
+test('conditionalOrderMatches verifies stored take-profit identity', () => {
+  const expected = {
+    rfqId: 123,
+    marketId: market.marketId,
+    direction: 'short',
+    triggerPrice: '110',
+    triggerType: RFQ_TPSL_TRIGGER.MARK_PRICE_GTE,
+    taker: 'inj1taker',
+  };
+  const stored = {
+    rfqId: 123n,
+    marketId: market.marketId,
+    direction: 'short',
+    triggerPrice: '110',
+    triggerType: RFQ_TPSL_TRIGGER.MARK_PRICE_GTE,
+    requestAddress: 'inj1taker',
+    status: 'pending_trigger',
+    createdAt: 1770000000000n,
+  };
+
+  assert.equal(conditionalOrderMatches(stored, expected), true);
+  assert.equal(serializeConditionalOrder(stored).createdAt, '1770000000000');
+});
+
+test('verifyConditionalOrderStored reads back an active conditional order', async () => {
+  const expected = {
+    rfqId: 123,
+    marketId: market.marketId,
+    direction: 'short',
+    triggerPrice: '110',
+    triggerType: RFQ_TPSL_TRIGGER.MARK_PRICE_GTE,
+  };
+
+  const result = await verifyConditionalOrderStored({
+    taker: 'inj1taker',
+    order: expected,
+    retryDelayMs: 0,
+    rfqApiClient: {
+      async listConditionalOrders(request) {
+        assert.deepEqual(request, {
+          requestAddress: 'inj1taker',
+          marketId: market.marketId,
+        });
+        return {
+          orders: [{
+            ...expected,
+            rfqId: 123n,
+            requestAddress: 'inj1taker',
+            status: 'pending_trigger',
+          }],
+        };
+      },
+    },
+  });
+
+  assert.equal(result.verified, true);
+  assert.equal(result.status, 'pending_trigger');
+  assert.equal(result.order.rfqId, '123');
 });
