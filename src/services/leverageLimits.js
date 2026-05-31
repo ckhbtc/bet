@@ -13,10 +13,10 @@ export const LEVERAGE_PRESET_ROWS = [
 ];
 
 export const LEVERAGE_LEVEL_META = {
-  LOW: { label: 'Low', desc: 'Big swing required', color: '#4a9eff' },
-  MEDIUM: { label: 'Medium', desc: 'Moderate move needed', color: '#f59e0b' },
-  HIGH: { label: 'High', desc: 'Small price move wins', color: '#ef4444' },
-  MAX: { label: 'Max', desc: 'Smallest price move wins', color: '#dc2626' },
+  LOW: { label: 'Conservative', desc: 'Lower risk', color: '#4a9eff' },
+  MEDIUM: { label: 'Balanced', desc: 'Middle ground', color: '#f59e0b' },
+  HIGH: { label: 'Degen', desc: 'Higher risk', color: '#ef4444' },
+  MAX: { label: 'Mad Max', desc: 'Highest risk', color: '#dc2626' },
 };
 
 function positiveDecimal(value, fallback) {
@@ -144,8 +144,7 @@ export function assertOpenMarginAllowed({
   if (margin.gte(requiredMargin)) return;
 
   const label = market?.symbol || String(market?.ticker || '').split('/')[0] || 'this market';
-  const maxLeverage = formatLeverage(steppedMaxOpenLeverage(market?.initialMarginRatio, slippage));
   throw new Error(
-    `Selected leverage is too high for ${label}. Max is ${maxLeverage}x on this market. Choose a lower aggressiveness.`
+    `Selected aggressiveness is too high for ${label}. Choose a lower aggressiveness.`
   );
 }

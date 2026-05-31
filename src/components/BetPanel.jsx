@@ -3,10 +3,8 @@ import Sparkline from './Sparkline';
 import { formatPrice, liquidationPrice } from '../data/mockData';
 import {
   RFQ_OPEN_SLIPPAGE,
-  formatLeverage,
   isOpenLeverageAllowed,
   leverageOptionsForMarket,
-  steppedMaxOpenLeverage,
 } from '../services/leverageLimits';
 
 const QUICK_STAKES = [10, 25, 50, 100, 250];
@@ -30,10 +28,6 @@ export default function BetPanel({
   const winTargetNum = Number(winTarget) || 0;
   const safeStake = Math.max(1, stakeNum);
   const safeWinTarget = Math.max(1, winTargetNum);
-  const maxLeverage = useMemo(
-    () => steppedMaxOpenLeverage(market.initialMarginRatio, RFQ_OPEN_SLIPPAGE),
-    [market.initialMarginRatio]
-  );
   const leverageOptions = useMemo(
     () => leverageOptionsForMarket(market.initialMarginRatio, RFQ_OPEN_SLIPPAGE),
     [market.initialMarginRatio]
@@ -260,26 +254,28 @@ export default function BetPanel({
                 key={key}
                 onClick={() => !disabled && setAggr(key)}
                 disabled={disabled}
-                title={disabled ? `Max ${formatLeverage(maxLeverage)}x on this market` : config.desc}
+                title={disabled ? 'Not available on this market' : config.desc}
                 style={{
                   background: active && !disabled ? `${config.color}15` : 'var(--bg-primary)',
                   border: `1px solid ${active && !disabled ? config.color : 'var(--border)'}`,
-                  borderRadius: 8, padding: '10px 8px',
+                  borderRadius: 8, padding: '10px 8px', minHeight: 58,
                   cursor: disabled ? 'not-allowed' : 'pointer',
-                  display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2,
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2,
                   opacity: disabled ? 0.42 : 1,
                 }}
               >
                 <span style={{
-                  fontSize: 13, fontWeight: 600,
+                  fontSize: 12, fontWeight: 600, lineHeight: 1.05, textAlign: 'center',
                   color: active && !disabled ? config.color : 'var(--text-muted)',
-                  fontFamily: 'var(--font-heading)',
+                  fontFamily: 'var(--font-heading)', overflowWrap: 'anywhere',
                 }}>
                   {config.label}
                 </span>
-                <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>
-                  {disabled ? `Max ${formatLeverage(maxLeverage)}x` : `${formatLeverage(config.leverage)}x`}
-                </span>
+                {disabled && (
+                  <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>
+                    Unavailable
+                  </span>
+                )}
               </button>
             );
           })}
@@ -294,7 +290,7 @@ export default function BetPanel({
           fontSize: 13, color: 'var(--accent)', lineHeight: 1.5,
           fontFamily: 'var(--font-heading)',
         }}>
-          {aggrConfig.label} leverage can't reach this win.
+          {aggrConfig.label} style can't reach this win.
           Try a higher aggressiveness or a smaller win target.
         </div>
       ) : (
@@ -335,7 +331,7 @@ export default function BetPanel({
           borderRadius: 8, padding: '8px 12px', marginBottom: 12,
           fontSize: 12, color: 'var(--red)', textAlign: 'center', lineHeight: 1.5,
         }}>
-          {aggrConfig.label} is above {market.symbol}'s {formatLeverage(maxLeverage)}x limit.
+          {aggrConfig.label} style is not available for {market.symbol}.
           Choose a lower aggressiveness.
         </div>
       )}

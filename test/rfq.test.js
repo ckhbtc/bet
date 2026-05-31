@@ -174,7 +174,7 @@ test('buildRfqOrderInput rejects leverage above the market margin cap', () => {
     stakeUsdt: '50',
     leverage: '25',
     slippage: 0.01,
-  }), /Selected leverage is too high for DOT\. Max is 10x/);
+  }), /Selected aggressiveness is too high for DOT/);
 });
 
 test('buildRfqOrderInput allows leverage within the market margin cap', () => {

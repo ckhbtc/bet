@@ -1,11 +1,9 @@
 import { formatPrice } from '../data/mockData';
-import { formatLeverage } from '../services/leverageLimits';
 import CoinLogo from './CoinLogo';
 
 export default function ConfirmSheet({ bet, onConfirm, onEdit }) {
-  const aggrLabel = bet.aggrLabel || bet.aggr || 'Medium';
+  const aggrLabel = bet.aggrLabel || bet.aggr || 'Balanced';
   const aggrColor = bet.aggrColor || '#f59e0b';
-  const leverageLabel = bet.leverage ? `${formatLeverage(bet.leverage)}x` : null;
   const isUp = bet.direction === 'up';
   const color = isUp ? 'var(--green)' : 'var(--red)';
   const colorDim = isUp ? 'var(--green-dim)' : 'var(--red-dim)';
@@ -155,12 +153,6 @@ export default function ConfirmSheet({ bet, onConfirm, onEdit }) {
                 fontSize: 14, fontWeight: 700,
                 fontFamily: 'var(--font-heading)', color: aggrColor,
               }}>{aggrLabel}</div>
-              {leverageLabel && (
-                <div style={{
-                  fontSize: 10, fontFamily: 'var(--font-mono)',
-                  color: 'var(--text-muted)', marginTop: 2,
-                }}>{leverageLabel}</div>
-              )}
             </div>
           </div>
 
