@@ -119,6 +119,8 @@ export default function App() {
   const handleLockIn = useCallback(async () => {
     if (!pendingBet || !connected) return;
 
+    const needsTakeProfitSignature = pendingBet.targetPrice && Number(pendingBet.targetPrice) > 0;
+
     setTxStatus({
       type: 'loading',
       message: 'Order submitted',
@@ -130,8 +132,10 @@ export default function App() {
       if (openConfirmed) return;
       openConfirmed = true;
       setTxStatus({
-        type: 'success',
-        message: 'Order confirmed.',
+        type: needsTakeProfitSignature ? 'loading' : 'success',
+        message: needsTakeProfitSignature
+          ? 'next, confirm the take profit order through your connected wallet'
+          : 'Order confirmed.',
         txHash: result?.txHash,
       });
       setSelectedMarket(null);

@@ -43,14 +43,20 @@ export function effectiveOpenMarginRatio(initialMarginRatio, slippage = RFQ_OPEN
   return slip.plus(imr.mul(slip.plus(1)));
 }
 
+export function marketMaxLeverage(initialMarginRatio) {
+  const imr = positiveDecimal(initialMarginRatio, DEFAULT_INITIAL_MARGIN_RATIO);
+  if (!imr.isFinite() || imr.lte(0)) return Infinity;
+  return Number(new Decimal(1).div(imr).toDecimalPlaces(2, Decimal.ROUND_FLOOR));
+}
+
 export function maxOpenLeverage(initialMarginRatio, slippage = RFQ_OPEN_SLIPPAGE) {
   const effectiveRatio = effectiveOpenMarginRatio(initialMarginRatio, slippage);
   if (!effectiveRatio.isFinite() || effectiveRatio.lte(0)) return Infinity;
   return Number(new Decimal(1).div(effectiveRatio).toDecimalPlaces(2, Decimal.ROUND_FLOOR));
 }
 
-export function steppedMaxOpenLeverage(initialMarginRatio, slippage = RFQ_OPEN_SLIPPAGE) {
-  const rawMax = maxOpenLeverage(initialMarginRatio, slippage);
+export function steppedMarketMaxLeverage(initialMarginRatio) {
+  const rawMax = marketMaxLeverage(initialMarginRatio);
   if (!Number.isFinite(rawMax)) return STANDARD_MAX_LEVERAGE_STEPS[STANDARD_MAX_LEVERAGE_STEPS.length - 1];
 
   const safeStep = [...STANDARD_MAX_LEVERAGE_STEPS]
@@ -58,6 +64,10 @@ export function steppedMaxOpenLeverage(initialMarginRatio, slippage = RFQ_OPEN_S
     .find(step => step <= rawMax);
 
   return safeStep ?? 1;
+}
+
+export function steppedMaxOpenLeverage(initialMarginRatio) {
+  return steppedMarketMaxLeverage(initialMarginRatio);
 }
 
 export function leveragePresetRowForMax(maxLeverage) {
@@ -68,10 +78,14 @@ export function leveragePresetRowForMax(maxLeverage) {
 }
 
 export function leverageOptionsForMarket(initialMarginRatio, slippage = RFQ_OPEN_SLIPPAGE) {
-  const steppedMax = steppedMaxOpenLeverage(initialMarginRatio, slippage);
+  const steppedMax = steppedMarketMaxLeverage(initialMarginRatio);
   const row = leveragePresetRowForMax(steppedMax);
+  const levels = {
+    ...row.levels,
+    MAX: steppedMax,
+  };
 
-  return Object.entries(row.levels).map(([key, leverage]) => {
+  return Object.entries(levels).map(([key, leverage]) => {
     const meta = LEVERAGE_LEVEL_META[key];
     return {
       key,
@@ -95,13 +109,12 @@ export function formatLeverage(value) {
 export function isOpenLeverageAllowed({
   initialMarginRatio,
   leverage,
-  slippage = RFQ_OPEN_SLIPPAGE,
 }) {
   try {
     const lev = new Decimal(leverage);
     if (!lev.isFinite() || lev.lte(0)) return false;
-    const effectiveRatio = effectiveOpenMarginRatio(initialMarginRatio, slippage);
-    return lev.mul(effectiveRatio).lte(1);
+    const max = new Decimal(steppedMarketMaxLeverage(initialMarginRatio));
+    return max.isFinite() && lev.lte(max);
   } catch {
     return false;
   }
@@ -140,10 +153,21 @@ export function assertOpenMarginAllowed({
     initialMarginRatio: market?.initialMarginRatio,
     side,
   });
+  const label = market?.symbol || String(market?.ticker || '').split('/')[0] || 'this market';
+  const qty = positiveDecimal(quantity, '0');
+  const oracle = positiveDecimal(oraclePrice, '0');
+  const notionalLeverage = qty.mul(oracle).div(margin);
+  const maxLeverage = new Decimal(steppedMarketMaxLeverage(market?.initialMarginRatio));
+
+  if (maxLeverage.isFinite() && notionalLeverage.gt(maxLeverage)) {
+    throw new Error(
+      `Selected aggressiveness is too high for ${label}. Choose a lower aggressiveness.`
+    );
+  }
 
   if (margin.gte(requiredMargin)) return;
+  if (maxLeverage.isFinite() && notionalLeverage.lte(maxLeverage)) return;
 
-  const label = market?.symbol || String(market?.ticker || '').split('/')[0] || 'this market';
   throw new Error(
     `Selected aggressiveness is too high for ${label}. Choose a lower aggressiveness.`
   );

@@ -30,8 +30,10 @@ import {
   formatLeverage,
   leverageOptionsForMarket,
   leveragePresetRowForMax,
+  marketMaxLeverage,
   maxOpenLeverage,
   steppedMaxOpenLeverage,
+  steppedMarketMaxLeverage,
 } from '../src/services/leverageLimits.js';
 import {
   RFQ_CHAIN_ID,
@@ -131,6 +133,11 @@ test('steppedMaxOpenLeverage rounds the market cap down to a standard step', () 
   assert.equal(steppedMaxOpenLeverage('0.083333', 0.01), 10);
 });
 
+test('steppedMarketMaxLeverage rounds the raw market max down to the nearest standard step', () => {
+  assert.equal(formatLeverage(marketMaxLeverage('0.019230769')), '52');
+  assert.equal(steppedMarketMaxLeverage('0.019230769'), 50);
+});
+
 test('leverageOptionsForMarket uses the standard preset row for the safe max step', () => {
   const options = leverageOptionsForMarket('0.083333', 0.01);
 
@@ -143,6 +150,12 @@ test('leverageOptionsForMarket uses the standard preset row for the safe max ste
       ['MAX', 10, true],
     ]
   );
+});
+
+test('leverageOptionsForMarket keeps Mad Max at the stepped market max', () => {
+  const options = leverageOptionsForMarket('0.019230769', 0.01);
+
+  assert.equal(options.find(option => option.key === 'MAX').leverage, 50);
 });
 
 test('leveragePresetRowForMax matches the standard leverage table', () => {
@@ -175,6 +188,17 @@ test('buildRfqOrderInput rejects leverage above the market margin cap', () => {
     leverage: '25',
     slippage: 0.01,
   }), /Selected aggressiveness is too high for DOT/);
+});
+
+test('buildRfqOrderInput rejects unsnapped raw market max leverage', () => {
+  assert.throws(() => buildRfqOrderInput({
+    market: { ...market, symbol: 'BTC', initialMarginRatio: '0.019230769' },
+    oraclePrice: '100',
+    side: 'long',
+    stakeUsdt: '50',
+    leverage: '52',
+    slippage: 0,
+  }), /Selected aggressiveness is too high for BTC/);
 });
 
 test('buildRfqOrderInput allows leverage within the market margin cap', () => {
