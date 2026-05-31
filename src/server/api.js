@@ -1,13 +1,13 @@
 /**
- * Server API surface — minimal. The frontend signs and broadcasts trades
- * itself using the locally-stored grantee key, so this route file only
- * holds the faucet (which needs FAUCET_PRIVATE_KEY in .env and can't
- * safely run in the browser).
+ * Server API surface — minimal. Trade keys stay in-browser. The server only
+ * handles operations that do not require custody: faucet, CCTP relay, and
+ * RFQ signed-tx broadcast relay.
  */
 
 import express from 'express';
 import { initAccount } from './faucet.js';
 import { relayMint } from './relayMint.js';
+import { relayRfqBroadcast } from './rfqBroadcast.js';
 
 const router = express.Router();
 router.use(express.json({ limit: '64kb' }));
@@ -33,6 +33,17 @@ router.post('/relay-mint', async (req, res) => {
     res.json({ ok: true, txHash });
   } catch (err) {
     const code = /Rate limit|Invalid|Message dst/.test(err.message) ? 400 : 500;
+    res.status(code).json({ error: err.message });
+  }
+});
+
+router.post('/rfq-broadcast', async (req, res) => {
+  try {
+    const { txBytes } = req.body || {};
+    const result = await relayRfqBroadcast({ txBytes });
+    res.json({ ok: true, txHash: result.txHash, relayMs: result.relayMs });
+  } catch (err) {
+    const code = /Invalid/.test(err.message) ? 400 : 502;
     res.status(code).json({ error: err.message });
   }
 });

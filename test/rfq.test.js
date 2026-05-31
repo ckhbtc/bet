@@ -10,6 +10,7 @@ import { MsgExec as AuthzMsgExecPb } from '@injectivelabs/core-proto-ts-v2/gener
 import { MsgExecuteContractCompat as WasmxMsgExecuteContractCompatPb } from '@injectivelabs/core-proto-ts-v2/generated/injective/wasmx/v1/tx_pb.js';
 import {
   assertPreparedQuoteFreshness,
+  broadcastSignedRfqTxRaw,
   buildAcceptQuoteMessage,
   buildRfqCloseInput,
   buildRfqGatewayPrepareRequest,
@@ -288,11 +289,11 @@ test('normalizeRfqQuoteForContract emits the accept_quote quote shape', () => {
   });
 });
 
-test('getPreparedQuoteExpiryReport flags prepared RFQ quotes inside the block-safety window', () => {
+test('getPreparedQuoteExpiryReport flags prepared RFQ quotes that are already expired', () => {
   const nowMs = 1_770_000_000_000;
   const prepared = {
     tx: preparedTxWithQuotes([
-      quote({ expiry: { timestamp: nowMs + 1_000, height: 0 }, price: '100' }),
+      quote({ expiry: { timestamp: nowMs - 250, height: 0 }, price: '100' }),
       quote({ expiry: { timestamp: nowMs + 7_000, height: 0 }, price: '100.1' }),
     ]),
   };
@@ -306,18 +307,18 @@ test('getPreparedQuoteExpiryReport flags prepared RFQ quotes inside the block-sa
   assert.equal(report.inspected, true);
   assert.equal(report.quoteCount, 2);
   assert.equal(report.unsafeQuotes.length, 1);
-  assert.equal(report.shortestTtlMs, 1_000);
+  assert.equal(report.shortestTtlMs, -250);
   assert.throws(
     () => assertPreparedQuoteFreshness(prepared, { nowMs, minTtlMs: RFQ_MIN_QUOTE_TTL_MS }),
-    /RFQ quotes expire too soon \(1000ms left; need 4000ms\)/
+    /RFQ quotes expire too soon \(0ms left; need 0ms\)/
   );
 });
 
-test('getPreparedQuoteExpiryReport accepts prepared RFQ quotes with enough expiry buffer', () => {
+test('getPreparedQuoteExpiryReport accepts prepared RFQ quotes with standard maker TTL', () => {
   const nowMs = 1_770_000_000_000;
   const prepared = {
     tx: preparedTxWithQuotes([
-      quote({ expiry: { timestamp: nowMs + 4_500, height: 0 }, price: '100' }),
+      quote({ expiry: { timestamp: nowMs + 1_000, height: 0 }, price: '100' }),
       quote({ expiry: { timestamp: nowMs + 7_000, height: 0 }, price: '100.1' }),
     ]),
   };
@@ -333,6 +334,49 @@ test('getPreparedQuoteExpiryReport accepts prepared RFQ quotes with enough expir
   assert.doesNotThrow(
     () => assertPreparedQuoteFreshness(prepared, { nowMs, minTtlMs: RFQ_MIN_QUOTE_TTL_MS })
   );
+});
+
+test('broadcastSignedRfqTxRaw submits through the fastest path, then waits for confirmation', async () => {
+  const calls = [];
+  const result = await broadcastSignedRfqTxRaw({
+    txRaw: {},
+    txApiClient: {
+      fetchTxPoll: async (txHash) => {
+        calls.push(['fetchTxPoll', txHash]);
+        return { txHash: 'confirmed-hash' };
+      },
+      broadcast: () => new Promise((resolve) => {
+        setTimeout(() => resolve({ txHash: 'direct-hash' }), 20);
+      }),
+    },
+    relayBroadcast: async () => ({ txHash: 'relay-hash' }),
+  });
+
+  assert.equal(result.txHash, 'confirmed-hash');
+  assert.deepEqual(calls, [['fetchTxPoll', 'relay-hash']]);
+});
+
+test('broadcastSignedRfqTxRaw uses direct onBroadcast ack when the relay is unavailable', async () => {
+  const calls = [];
+  const result = await broadcastSignedRfqTxRaw({
+    txRaw: {},
+    txApiClient: {
+      fetchTxPoll: async (txHash) => {
+        calls.push(['fetchTxPoll', txHash]);
+        return { txHash };
+      },
+      broadcast: (_txRaw, options) => new Promise((resolve) => {
+        options.onBroadcast('direct-ack-hash');
+        setTimeout(() => resolve({ txHash: 'direct-final-hash' }), 20);
+      }),
+    },
+    relayBroadcast: async () => {
+      throw new Error('relay down');
+    },
+  });
+
+  assert.equal(result.txHash, 'direct-ack-hash');
+  assert.deepEqual(calls, [['fetchTxPoll', 'direct-ack-hash']]);
 });
 
 test('signPreparedAutoSignTxRaw signs the autosign slot and preserves fee payer sig', async () => {

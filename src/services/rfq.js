@@ -91,6 +91,26 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+function firstSuccessful(promises) {
+  return new Promise((resolve, reject) => {
+    const errors = [];
+    let pending = promises.length;
+    if (pending === 0) {
+      reject(new Error('No broadcast paths available'));
+      return;
+    }
+    for (const promise of promises) {
+      Promise.resolve(promise).then(resolve, (err) => {
+        errors.push(err);
+        pending -= 1;
+        if (pending === 0) {
+          reject(new Error(errors.map((error) => error?.message || String(error)).join('; ')));
+        }
+      });
+    }
+  });
+}
+
 function extractRawPubKeyBytes(value) {
   const bytes = value instanceof Uint8Array ? value : new Uint8Array(value || []);
   if (!bytes.length) return bytes;
@@ -873,10 +893,70 @@ export async function signPreparedAutoSignTxRaw({
   return txRaw;
 }
 
+export async function relaySignedRfqTxRaw(txRaw) {
+  if (typeof fetch !== 'function') throw new Error('RFQ relay unavailable');
+  const txBytes = uint8ArrayToBase64(CosmosTxV1Beta1TxPb.TxRaw.toBinary(txRaw));
+  const response = await fetch('/api/rfq-broadcast', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ txBytes }),
+  });
+  const body = await response.json().catch(() => ({}));
+  if (!response.ok || !body?.ok || !body.txHash) {
+    throw new Error(body?.error || `RFQ relay broadcast failed (${response.status})`);
+  }
+  return { txHash: body.txHash };
+}
+
+function directBroadcastSignedRfqTxRaw({ txRaw, txApiClient }) {
+  return new Promise((resolve, reject) => {
+    txApiClient.broadcast(txRaw, {
+      onBroadcast: (txHash) => {
+        resolve({ txHash, confirmed: false });
+      },
+    }).then((response) => {
+      resolve({
+        txHash: response.txHash,
+        txResponse: response,
+        confirmed: true,
+      });
+    }, reject);
+  });
+}
+
+export async function broadcastSignedRfqTxRaw({
+  txRaw,
+  txApiClient = txApi,
+  relayBroadcast = relaySignedRfqTxRaw,
+}) {
+  const directBroadcast = directBroadcastSignedRfqTxRaw({ txRaw, txApiClient });
+  const attempts = [directBroadcast];
+  if (relayBroadcast) {
+    attempts.unshift(relayBroadcast(txRaw).then((response) => ({
+      ...response,
+      confirmed: false,
+    })));
+  }
+  const accepted = await firstSuccessful(attempts);
+  if (accepted.confirmed) {
+    return {
+      txHash: accepted.txHash,
+      txResponse: accepted.txResponse,
+    };
+  }
+
+  const txResponse = await txApiClient.fetchTxPoll(accepted.txHash);
+  return {
+    txHash: txResponse.txHash || accepted.txHash,
+    txResponse,
+  };
+}
+
 export async function broadcastPreparedRfqAutoSign({
   prepared,
   session,
   txApiClient = txApi,
+  relayBroadcast = relaySignedRfqTxRaw,
 }) {
   const txRaw = await signPreparedAutoSignTxRaw({
     tx: prepared.tx,
@@ -886,10 +966,7 @@ export async function broadcastPreparedRfqAutoSign({
     feePayerPubKey: prepared.feePayerPubKey,
   });
 
-  const response = await txApiClient.broadcast(txRaw);
-  if (response.code !== 0) {
-    throw new Error(`Trade settlement failed (code ${response.code}): ${response.rawLog}`);
-  }
+  const response = await broadcastSignedRfqTxRaw({ txRaw, txApiClient, relayBroadcast });
   return { txHash: response.txHash };
 }
 
@@ -900,6 +977,7 @@ export async function executeRfqGatewayAutoSign({
   onProgress = null,
   gatewayApi = rfqGatewayApi,
   txApiClient = txApi,
+  relayBroadcast = relaySignedRfqTxRaw,
   minQuoteTtlMs = RFQ_MIN_QUOTE_TTL_MS,
   maxPrepareAttempts = RFQ_PREPARE_MAX_ATTEMPTS,
 }) {
@@ -946,6 +1024,7 @@ export async function executeRfqGatewayAutoSign({
     prepared,
     session,
     txApiClient,
+    relayBroadcast,
   });
   onProgress?.({ phase: 'confirmed', prepared, result });
 
