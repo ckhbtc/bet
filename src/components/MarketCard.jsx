@@ -13,13 +13,14 @@ export default function MarketCard({ market, onPlaceBet }) {
         background: 'var(--bg-card)',
         border: '1px solid var(--border)',
         borderRadius: 12,
-        padding: 20,
+        padding: 14,
         cursor: 'pointer',
         transition: 'all 0.2s',
         display: 'flex',
         flexDirection: 'column',
-        gap: 16,
+        gap: 12,
         position: 'relative',
+        minHeight: 132,
       }}
       onMouseEnter={e => {
         e.currentTarget.style.background = 'var(--bg-card-hover)';
@@ -30,22 +31,26 @@ export default function MarketCard({ market, onPlaceBet }) {
         e.currentTarget.style.borderColor = 'var(--border)';
       }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-          <CoinLogo symbol={market.symbol} logoUrl={market.logo} size={40} />
-          <div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
+          <CoinLogo symbol={market.symbol} logoUrl={market.logo} size={34} />
+          <div style={{ minWidth: 0 }}>
             <div style={{
-              fontSize: 18, fontWeight: 700, letterSpacing: -0.3,
+              fontSize: 16, fontWeight: 700, letterSpacing: 0,
               fontFamily: 'var(--font-heading)',
               lineHeight: 1.2,
             }}>{market.symbol}</div>
             <div style={{
-              fontSize: 10, fontWeight: 500,
+              fontSize: 9, fontWeight: 500,
               fontFamily: 'var(--font-mono)',
               color: 'var(--text-muted)',
               letterSpacing: 0.6,
               textTransform: 'uppercase',
               marginTop: 2,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              maxWidth: 132,
             }}>{market.name}</div>
           </div>
         </div>
@@ -55,7 +60,7 @@ export default function MarketCard({ market, onPlaceBet }) {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' }}>
         <div>
           <div style={{
-            fontSize: 30, fontWeight: 700, letterSpacing: -1,
+            fontSize: 24, fontWeight: 700, letterSpacing: 0,
             fontFamily: 'var(--font-heading)',
             lineHeight: 1,
             fontVariantNumeric: 'tabular-nums',
@@ -63,7 +68,7 @@ export default function MarketCard({ market, onPlaceBet }) {
             ${formatPrice(market.price, market.priceDecimals)}
           </div>
           <div style={{
-            fontSize: 12,
+            fontSize: 11,
             fontFamily: 'var(--font-mono)',
             color: isUp ? 'var(--green)' : 'var(--red)',
             fontWeight: 500,
@@ -77,12 +82,13 @@ export default function MarketCard({ market, onPlaceBet }) {
           color: 'var(--on-accent)',
           border: 'none',
           borderRadius: 8,
-          padding: '10px 18px',
-          fontSize: 13,
+          padding: '9px 12px',
+          fontSize: 11,
           fontWeight: 600,
           cursor: 'pointer',
           fontFamily: 'var(--font-heading)',
-          letterSpacing: 0.2,
+          letterSpacing: 0,
+          flexShrink: 0,
         }}>
           Place Bet →
         </button>
