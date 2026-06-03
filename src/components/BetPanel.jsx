@@ -1,17 +1,20 @@
 import { useEffect, useMemo, useState } from 'react';
 import Sparkline from './Sparkline';
-import { formatPrice, liquidationPrice } from '../data/mockData';
+import { formatPrice, formatUsdcBalance, liquidationPrice } from '../data/mockData';
 import {
   RFQ_OPEN_SLIPPAGE,
   isOpenLeverageAllowed,
   leverageOptionsForMarket,
 } from '../services/leverageLimits';
+import { RFQ_PREQUOTE_INTERVAL_MS } from '../services/rfqConstants';
+import { buildRfqOrderInput, sendRfqPrequoteRequest } from '../services/rfq';
 
 const QUICK_STAKES = [10, 25, 50, 100, 250];
 
 export default function BetPanel({
   market,
   balance,
+  requestAddress,
   rfqReady = true,
   onConfirm,
   onClose,
@@ -21,11 +24,13 @@ export default function BetPanel({
   // numeric operations use the *Num derived values below.
   const [stake, setStake] = useState('50');
   const [winTarget, setWinTarget] = useState('100');
+  const [targetMode, setTargetMode] = useState('take_profit');
   const [aggr, setAggr] = useState('MEDIUM');
 
   const priceDecimals = market.priceDecimals;
   const stakeNum = Number(stake) || 0;
   const winTargetNum = Number(winTarget) || 0;
+  const hasTakeProfit = targetMode === 'take_profit';
   const safeStake = Math.max(1, stakeNum);
   const safeWinTarget = Math.max(1, winTargetNum);
   const leverageOptions = useMemo(
@@ -50,12 +55,13 @@ export default function BetPanel({
   }, [aggr, leverageOptions]);
 
   const targetPrice = useMemo(() => {
+    if (!hasTakeProfit) return null;
     const lev = aggrConfig.leverage;
     if (direction === 'up') {
       return market.price * (1 + (safeWinTarget / (safeStake * lev)));
     }
     return market.price * (1 - (safeWinTarget / (safeStake * lev)));
-  }, [market.price, safeStake, safeWinTarget, aggrConfig.leverage, direction]);
+  }, [hasTakeProfit, market.price, safeStake, safeWinTarget, aggrConfig.leverage, direction]);
 
   const liqPrice = useMemo(() => liquidationPrice({
     entryPrice: market.price,
@@ -88,12 +94,61 @@ export default function BetPanel({
   // Short positions whose required move >= 100% would need price to hit zero
   // (or negative). At low leverage with a big win target this happens often;
   // surface it as "out of reach" instead of a meaningless $0 target.
-  const requiredMove = safeWinTarget / (safeStake * aggrConfig.leverage);
-  const unreachable = direction === 'down' ? requiredMove >= 1 : false;
+  const requiredMove = hasTakeProfit ? safeWinTarget / (safeStake * aggrConfig.leverage) : 0;
+  const unreachable = hasTakeProfit && direction === 'down' ? requiredMove >= 1 : false;
 
-  const canPlaceBet = stakeNum >= 1 && winTargetNum >= 1 && stakeNum <= balance
-    && !isNaN(targetPrice) && targetPrice > 0 && !unreachable
+  const targetValid = !hasTakeProfit || (winTargetNum >= 1 && !isNaN(targetPrice) && targetPrice > 0);
+  const canPlaceBet = stakeNum >= 1 && stakeNum <= balance
+    && targetValid && !unreachable
     && selectedLeverageAllowed && rfqReady;
+
+  useEffect(() => {
+    if (!requestAddress || !rfqReady || !selectedLeverageAllowed || stakeNum < 1) return;
+
+    let cancelled = false;
+    const sendPrequotes = async () => {
+      if (cancelled) return;
+      const price = market.price;
+      if (!price || price <= 0) return;
+
+      for (const side of ['long', 'short']) {
+        try {
+          const input = buildRfqOrderInput({
+            market,
+            oraclePrice: price,
+            side,
+            stakeUsdt: stakeNum,
+            leverage: aggrConfig.leverage,
+            slippage: RFQ_OPEN_SLIPPAGE,
+          });
+          await sendRfqPrequoteRequest({
+            requestAddress,
+            marketId: market.marketId,
+            ...input,
+          });
+        } catch {
+          // Prequotes are a warmup path only. The final submit still validates.
+        }
+      }
+    };
+
+    void sendPrequotes();
+    const interval = setInterval(() => {
+      void sendPrequotes();
+    }, RFQ_PREQUOTE_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [
+    requestAddress,
+    rfqReady,
+    selectedLeverageAllowed,
+    stakeNum,
+    aggrConfig.leverage,
+    market,
+  ]);
 
   return (
     <div style={{
@@ -211,32 +266,72 @@ export default function BetPanel({
         </div>
       </div>
 
-      {/* Win target */}
+      {/* Exit mode */}
       <div style={{ marginBottom: 16 }}>
         <label style={{
           fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)',
           textTransform: 'uppercase', letterSpacing: 0.6, display: 'block', marginBottom: 6,
-        }}>I want to win</label>
-        <div style={{ position: 'relative' }}>
-          <span style={{
-            position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
-            fontSize: 20, fontWeight: 600, color: 'var(--text-muted)',
-          }}>$</span>
-          <input
-            type="text"
-            inputMode="numeric"
-            value={winTarget}
-            onChange={e => handleWinTargetInput(e.target.value)}
-            placeholder="0"
-            style={{
-              width: '100%', background: 'var(--bg-primary)', border: '1px solid var(--border)',
-              borderRadius: 10, padding: '14px 14px 14px 32px', color: 'var(--green)',
-              fontSize: 20, fontWeight: 600, fontFamily: 'var(--font-heading)',
-              fontVariantNumeric: 'tabular-nums', outline: 'none',
-            }}
-          />
+        }}>Exit</label>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+          {[
+            { key: 'take_profit', label: 'Take Profit' },
+            { key: 'yolo', label: 'YOLO' },
+          ].map(option => {
+            const active = targetMode === option.key;
+            return (
+              <button
+                key={option.key}
+                onClick={() => setTargetMode(option.key)}
+                style={{
+                  background: active ? 'var(--accent-dim)' : 'var(--bg-primary)',
+                  border: `1px solid ${active ? 'var(--accent)' : 'var(--border)'}`,
+                  borderRadius: 8,
+                  padding: '10px 8px',
+                  minHeight: 44,
+                  color: active ? 'var(--accent)' : 'var(--text-muted)',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  fontFamily: 'var(--font-heading)',
+                  textTransform: 'uppercase',
+                  letterSpacing: 0.2,
+                }}
+              >
+                {option.label}
+              </button>
+            );
+          })}
         </div>
       </div>
+
+      {/* Win target */}
+      {hasTakeProfit && (
+        <div style={{ marginBottom: 16 }}>
+          <label style={{
+            fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)',
+            textTransform: 'uppercase', letterSpacing: 0.6, display: 'block', marginBottom: 6,
+          }}>I want to win</label>
+          <div style={{ position: 'relative' }}>
+            <span style={{
+              position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)',
+              fontSize: 20, fontWeight: 600, color: 'var(--text-muted)',
+            }}>$</span>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={winTarget}
+              onChange={e => handleWinTargetInput(e.target.value)}
+              placeholder="0"
+              style={{
+                width: '100%', background: 'var(--bg-primary)', border: '1px solid var(--border)',
+                borderRadius: 10, padding: '14px 14px 14px 32px', color: 'var(--green)',
+                fontSize: 20, fontWeight: 600, fontFamily: 'var(--font-heading)',
+                fontVariantNumeric: 'tabular-nums', outline: 'none',
+              }}
+            />
+          </div>
+        </div>
+      )}
 
       {/* Aggressiveness */}
       <div style={{ marginBottom: 20 }}>
@@ -293,7 +388,7 @@ export default function BetPanel({
           {aggrConfig.label} style can't reach this win.
           Try a higher aggressiveness or a smaller win target.
         </div>
-      ) : (
+      ) : hasTakeProfit ? (
         <div style={{
           background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 8,
           padding: '12px 16px', marginBottom: 12, textAlign: 'center',
@@ -312,7 +407,7 @@ export default function BetPanel({
             ${formatPrice(targetPrice, priceDecimals)}
           </div>
         </div>
-      )}
+      ) : null}
 
       {/* Validation warnings */}
       {stakeNum > balance && (
@@ -321,7 +416,7 @@ export default function BetPanel({
           borderRadius: 8, padding: '8px 12px', marginBottom: 12,
           fontSize: 12, color: 'var(--red)', textAlign: 'center',
         }}>
-          Insufficient balance. You have ${balance.toLocaleString()}.
+          Insufficient balance. You have ${formatUsdcBalance(balance)}.
         </div>
       )}
 
@@ -352,13 +447,24 @@ export default function BetPanel({
           fontSize: 12, color: 'var(--text-muted)', textAlign: 'center',
           marginBottom: 16, lineHeight: 1.6,
         }}>
-          If {market.symbol} reaches{' '}
-          <span style={{ color: 'var(--red)', fontFamily: 'var(--font-mono)' }}>
-            ${formatPrice(liqPrice, priceDecimals)}
-          </span>{' '}before{' '}
-          <span style={{ color: 'var(--green)', fontFamily: 'var(--font-mono)' }}>
-            ${formatPrice(targetPrice, priceDecimals)}
-          </span>, you may lose your ${stakeNum} bet.
+          {hasTakeProfit ? (
+            <>
+              If {market.symbol} reaches{' '}
+              <span style={{ color: 'var(--red)', fontFamily: 'var(--font-mono)' }}>
+                ${formatPrice(liqPrice, priceDecimals)}
+              </span>{' '}before{' '}
+              <span style={{ color: 'var(--green)', fontFamily: 'var(--font-mono)' }}>
+                ${formatPrice(targetPrice, priceDecimals)}
+              </span>, you may lose your ${stakeNum} bet.
+            </>
+          ) : (
+            <>
+              If {market.symbol} reaches{' '}
+              <span style={{ color: 'var(--red)', fontFamily: 'var(--font-mono)' }}>
+                ${formatPrice(liqPrice, priceDecimals)}
+              </span>, you may lose your ${stakeNum} bet.
+            </>
+          )}
         </div>
       )}
 
@@ -373,7 +479,8 @@ export default function BetPanel({
           aggrLabel: aggrConfig.label,
           aggrColor: aggrConfig.color,
           leverage: aggrConfig.leverage,
-          targetPrice,
+          targetMode,
+          targetPrice: hasTakeProfit ? targetPrice : null,
           liqPrice,
         })}
         disabled={!canPlaceBet}
@@ -390,7 +497,7 @@ export default function BetPanel({
           opacity: canPlaceBet ? 1 : 0.5,
         }}
       >
-        Place Bet →
+        {hasTakeProfit ? 'Place Bet →' : 'YOLO →'}
       </button>
     </div>
   );

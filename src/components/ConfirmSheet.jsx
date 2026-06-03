@@ -5,9 +5,10 @@ export default function ConfirmSheet({ bet, onConfirm, onEdit }) {
   const aggrLabel = bet.aggrLabel || bet.aggr || 'Balanced';
   const aggrColor = bet.aggrColor || '#f59e0b';
   const isUp = bet.direction === 'up';
+  const hasTakeProfit = Boolean(bet.targetPrice && Number(bet.targetPrice) > 0);
   const color = isUp ? 'var(--green)' : 'var(--red)';
   const colorDim = isUp ? 'var(--green-dim)' : 'var(--red-dim)';
-  const multiplier = bet.stake > 0 ? bet.winTarget / bet.stake : 0;
+  const multiplier = hasTakeProfit && bet.stake > 0 ? bet.winTarget / bet.stake : 0;
   const priceDecimals = bet.market.priceDecimals;
 
   return (
@@ -72,7 +73,7 @@ export default function ConfirmSheet({ bet, onConfirm, onEdit }) {
         </div>
 
         <div style={{ padding: '20px 28px' }}>
-          {/* Hero numbers: bet → win, with multiplier chip */}
+          {/* Hero numbers: bet → outcome, with multiplier chip */}
           <div style={{
             display: 'grid', gridTemplateColumns: '1fr auto 1fr',
             alignItems: 'center', gap: 12, marginBottom: 16,
@@ -110,13 +111,13 @@ export default function ConfirmSheet({ bet, onConfirm, onEdit }) {
               <div style={{
                 fontSize: 10, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)',
                 textTransform: 'uppercase', letterSpacing: 1.5, marginBottom: 4,
-              }}>To win</div>
+              }}>{hasTakeProfit ? 'To win' : 'Mode'}</div>
               <div style={{
                 fontSize: 28, fontWeight: 700,
                 fontFamily: 'var(--font-heading)', letterSpacing: -0.5,
                 color: 'var(--green)',
                 fontVariantNumeric: 'tabular-nums',
-              }}>${bet.winTarget}</div>
+              }}>{hasTakeProfit ? `$${bet.winTarget}` : 'YOLO'}</div>
             </div>
           </div>
 
@@ -132,12 +133,12 @@ export default function ConfirmSheet({ bet, onConfirm, onEdit }) {
               <div style={{
                 fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)',
                 textTransform: 'uppercase', letterSpacing: 1.2, marginBottom: 2,
-              }}>Target price</div>
+              }}>{hasTakeProfit ? 'Target price' : 'Take profit'}</div>
               <div style={{
                 fontSize: 16, fontWeight: 700,
                 fontFamily: 'var(--font-heading)', color: 'var(--accent)',
                 fontVariantNumeric: 'tabular-nums',
-              }}>${formatPrice(bet.targetPrice, priceDecimals)}</div>
+              }}>{hasTakeProfit ? `$${formatPrice(bet.targetPrice, priceDecimals)}` : 'None'}</div>
             </div>
             <div style={{
               background: `${aggrColor}15`, border: `1px solid ${aggrColor}`,
@@ -162,13 +163,24 @@ export default function ConfirmSheet({ bet, onConfirm, onEdit }) {
             borderRadius: 8, padding: '10px 14px', marginBottom: 20,
             fontSize: 12, color: 'var(--red)', textAlign: 'center', lineHeight: 1.5,
           }}>
-            If {bet.market.symbol} reaches{' '}
-            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
-              ${formatPrice(bet.liqPrice, priceDecimals)}
-            </span>{' '}before{' '}
-            <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
-              ${formatPrice(bet.targetPrice, priceDecimals)}
-            </span>, you may lose your ${bet.stake} bet.
+            {hasTakeProfit ? (
+              <>
+                If {bet.market.symbol} reaches{' '}
+                <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
+                  ${formatPrice(bet.liqPrice, priceDecimals)}
+                </span>{' '}before{' '}
+                <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
+                  ${formatPrice(bet.targetPrice, priceDecimals)}
+                </span>, you may lose your ${bet.stake} bet.
+              </>
+            ) : (
+              <>
+                If {bet.market.symbol} reaches{' '}
+                <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
+                  ${formatPrice(bet.liqPrice, priceDecimals)}
+                </span>, you may lose your ${bet.stake} bet.
+              </>
+            )}
           </div>
 
           <div style={{ display: 'flex', gap: 8 }}>
