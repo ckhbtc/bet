@@ -22,13 +22,17 @@ const PHASE_COPY = {
   'burn-sign':       'Burn USDC — confirm in wallet',
   'burn-confirm':    'Burning on source chain...',
   attest:            'Waiting for Circle attestation (1–13 min)...',
-  'mint-submit':     'Minting native USDC on Injective...',
+  'mint-submit':     'Minting native USDC on INJECTIVE...',
   'mint-confirm':    'Confirming native USDC balance...',
   success:           'Bridge complete',
 };
 
 function shortHash(h) {
   return h ? `${h.slice(0, 10)}…${h.slice(-6)}` : '';
+}
+
+function networkLabel(name) {
+  return String(name || '').toUpperCase();
 }
 
 export default function BridgeModal({ onClose }) {
@@ -169,6 +173,8 @@ export default function BridgeModal({ onClose }) {
         : '…';
 
   const phaseLabel = phase ? (PHASE_COPY[phase] || phase) : null;
+  const sourceNetworkLabel = networkLabel(sourceChain.name);
+  const injectiveNetworkLabel = networkLabel(INJECTIVE.name);
 
   // Fast-mode fee blurb that sits under the "Fast" pill — shows the route fee
   // either as bps, or (once an amount is entered) as the buffered max-fee in
@@ -220,7 +226,7 @@ export default function BridgeModal({ onClose }) {
             <div style={{
               fontSize: 20, fontWeight: 700, fontFamily: 'var(--font-heading)',
               letterSpacing: -0.3,
-            }}>Bridge USDC to Injective</div>
+            }}>Bridge USDC to {injectiveNetworkLabel}</div>
           </div>
           <button
             onClick={onClose}
@@ -279,7 +285,7 @@ export default function BridgeModal({ onClose }) {
                     letterSpacing: 0.3,
                   }}
                 >
-                  <span>{sourceChain.name}</span>
+                  <span>{sourceNetworkLabel}</span>
                   <span style={{
                     fontSize: 10, lineHeight: 1, color: 'var(--text-muted)',
                     transform: chainMenuOpen ? 'rotate(180deg)' : 'none',
@@ -332,7 +338,7 @@ export default function BridgeModal({ onClose }) {
                             justifyContent: 'space-between', gap: 12,
                           }}
                         >
-                          <span>{c.name}</span>
+                          <span>{networkLabel(c.name)}</span>
                           {active && (
                             <span style={{
                               fontSize: 12, fontFamily: 'var(--font-mono)',
@@ -372,7 +378,7 @@ export default function BridgeModal({ onClose }) {
 
           <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: 18, margin: '2px 0' }}>↓</div>
 
-          {/* To: Injective (fixed) */}
+          {/* To: INJECTIVE (fixed) */}
           <div style={{
             background: 'var(--bg-primary)', border: '1px solid var(--border)',
             borderRadius: 10, padding: '12px 14px', marginBottom: 16,
@@ -383,7 +389,7 @@ export default function BridgeModal({ onClose }) {
             }}>To</div>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12 }}>
               <div>
-                <div style={{ fontSize: 16, fontWeight: 700, fontFamily: 'var(--font-heading)' }}>Injective</div>
+                <div style={{ fontSize: 16, fontWeight: 700, fontFamily: 'var(--font-heading)' }}>{injectiveNetworkLabel}</div>
                 <div style={{ fontSize: 11, fontFamily: 'var(--font-mono)', color: 'var(--text-muted)' }}>USDC (native)</div>
               </div>
               <div style={{
@@ -466,7 +472,7 @@ export default function BridgeModal({ onClose }) {
               fontSize: 13, color: 'var(--green)', textAlign: 'center',
               fontFamily: 'var(--font-mono)',
             }}>
-              Native USDC arrived on Injective.
+              Native USDC arrived on {injectiveNetworkLabel}.
               <div style={{ fontSize: 11, marginTop: 6, opacity: 0.85 }}>
                 burn: <a
                   href={`${success.srcExplorer}/tx/${success.burnHash}`}
@@ -501,7 +507,7 @@ export default function BridgeModal({ onClose }) {
                   opacity: !isPositiveTokenAmount(amount) ? 0.5 : 1,
                 }}
               >
-                {bridging ? 'Bridging…' : `Bridge from ${sourceChain.name} →`}
+                {bridging ? 'Bridging…' : `Bridge from ${sourceNetworkLabel} →`}
               </button>
             ) : (
               <button
@@ -522,7 +528,7 @@ export default function BridgeModal({ onClose }) {
             marginTop: 12, lineHeight: 1.5,
           }}>
             Circle CCTP V2 — burn USDC on the source chain, mint native USDC on
-            Injective. Mint gas is on us; you'll only need gas for the burn on
+            {injectiveNetworkLabel}. Mint gas is on us; you'll only need gas for the burn on
             the source chain.
           </div>
         </div>
