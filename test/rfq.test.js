@@ -362,6 +362,7 @@ test('getPreparedQuoteExpiryReport accepts prepared RFQ quotes with standard mak
 
 test('broadcastSignedRfqTxRaw submits through the fastest path, then waits for confirmation', async () => {
   const calls = [];
+  let directCalls = 0;
   const result = await broadcastSignedRfqTxRaw({
     txRaw: {},
     txApiClient: {
@@ -370,6 +371,7 @@ test('broadcastSignedRfqTxRaw submits through the fastest path, then waits for c
         return { txHash: 'confirmed-hash' };
       },
       broadcast: () => new Promise((resolve) => {
+        directCalls += 1;
         setTimeout(() => resolve({ txHash: 'direct-hash' }), 20);
       }),
     },
@@ -378,6 +380,8 @@ test('broadcastSignedRfqTxRaw submits through the fastest path, then waits for c
 
   assert.equal(result.txHash, 'confirmed-hash');
   assert.deepEqual(calls, [['fetchTxPoll', 'relay-hash']]);
+  await new Promise(resolve => setTimeout(resolve, 250));
+  assert.equal(directCalls, 0);
 });
 
 test('broadcastSignedRfqTxRaw uses direct onBroadcast ack when the relay is unavailable', async () => {

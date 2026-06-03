@@ -26,8 +26,10 @@ import {
   RFQ_EVM_CHAIN_ID,
   RFQ_GATEWAY_URL,
   RFQ_MIN_QUOTE_TTL_MS,
+  RFQ_PREQUOTE_IDLE_DISCONNECT_MS,
   RFQ_PREPARE_MAX_ATTEMPTS,
   RFQ_PREPARE_RETRY_DELAY_MS,
+  RFQ_RELAY_HEAD_START_MS,
   RFQ_REQUEST_TIMEOUT_MS,
   RFQ_WS_URL,
 } from './rfqConstants.js';
@@ -57,6 +59,11 @@ const txApi = new TxGrpcApi(endpoints.grpc);
 const rfqGatewayApi = new IndexerGrpcRfqGwApi(RFQ_GATEWAY_URL);
 const textDecoder = new TextDecoder();
 const rfqAccountDetailsCache = new Map();
+let rfqPrequoteSocket = null;
+let rfqPrequoteAddress = null;
+let rfqPrequoteConnectPromise = null;
+let rfqPrequoteIdleTimer = null;
+let rfqPrequoteLastWarningAt = 0;
 
 function randomId() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
@@ -869,6 +876,108 @@ export async function requestRfqQuotes({
   }
 }
 
+function warnRfqPrequote(err) {
+  const now = Date.now();
+  if (now - rfqPrequoteLastWarningAt < 10_000) return;
+  rfqPrequoteLastWarningAt = now;
+  console.warn('RFQ prequote stream issue:', err.message || err);
+}
+
+function scheduleRfqPrequoteIdleDisconnect() {
+  clearTimeout(rfqPrequoteIdleTimer);
+  rfqPrequoteIdleTimer = setTimeout(() => {
+    disconnectRfqPrequoteSocket();
+  }, RFQ_PREQUOTE_IDLE_DISCONNECT_MS);
+}
+
+export function disconnectRfqPrequoteSocket() {
+  clearTimeout(rfqPrequoteIdleTimer);
+  rfqPrequoteIdleTimer = null;
+  rfqPrequoteConnectPromise = null;
+  rfqPrequoteAddress = null;
+  if (rfqPrequoteSocket) {
+    rfqPrequoteSocket.disconnect();
+    rfqPrequoteSocket = null;
+  }
+}
+
+async function getRfqPrequoteSocket(requestAddress) {
+  if (!requestAddress) throw new Error('RFQ prequote request address is required');
+  if (rfqPrequoteSocket && rfqPrequoteAddress === requestAddress) {
+    if (rfqPrequoteConnectPromise) await rfqPrequoteConnectPromise;
+    return rfqPrequoteSocket;
+  }
+
+  disconnectRfqPrequoteSocket();
+  const socket = new RfqTakerSocket({
+    requestAddress,
+    onResponse: (response) => {
+      if (response.messageType === 'error' && response.error) {
+        warnRfqPrequote(new Error(response.error.message || response.error.code || 'RFQ stream error'));
+      }
+    },
+    onError: (err) => {
+      warnRfqPrequote(err);
+      if (rfqPrequoteSocket === socket) {
+        rfqPrequoteSocket = null;
+        rfqPrequoteConnectPromise = null;
+        rfqPrequoteAddress = null;
+      }
+      socket.disconnect();
+    },
+  });
+
+  rfqPrequoteSocket = socket;
+  rfqPrequoteAddress = requestAddress;
+  rfqPrequoteConnectPromise = socket.connect()
+    .catch((err) => {
+      if (rfqPrequoteSocket === socket) {
+        rfqPrequoteSocket = null;
+        rfqPrequoteAddress = null;
+      }
+      socket.disconnect();
+      throw err;
+    })
+    .finally(() => {
+      if (rfqPrequoteSocket === socket) {
+        rfqPrequoteConnectPromise = null;
+      }
+    });
+
+  await rfqPrequoteConnectPromise;
+  return socket;
+}
+
+export async function sendRfqPrequoteRequest({
+  requestAddress,
+  marketId,
+  direction,
+  margin,
+  quantity,
+  worstPrice,
+}) {
+  const socket = await getRfqPrequoteSocket(requestAddress);
+  const input = {
+    clientId: randomId(),
+    marketId,
+    direction,
+    margin: canonicalDecimal(margin),
+    quantity: canonicalDecimal(quantity),
+    worstPrice: canonicalDecimal(worstPrice),
+    expiry: 0,
+    priceCheck: true,
+  };
+
+  try {
+    socket.sendRequest(input);
+    scheduleRfqPrequoteIdleDisconnect();
+    return { clientId: input.clientId };
+  } catch (err) {
+    disconnectRfqPrequoteSocket();
+    throw err;
+  }
+}
+
 export function signatureHexToBytes(signature) {
   const clean = String(signature || '').replace(/^0x/i, '');
   if (!clean || clean.length % 2 !== 0 || !/^[0-9a-f]+$/i.test(clean)) {
@@ -1172,6 +1281,7 @@ export async function relaySignedRfqTxRaw(txRaw) {
     txHash: body.txHash,
     relayMs: Number.isFinite(Number(body.relayMs)) ? Number(body.relayMs) : null,
     clientRelayMs: roundMs(timingNow() - started),
+    duplicate: Boolean(body.duplicate),
   };
 }
 
@@ -1208,25 +1318,57 @@ export async function broadcastSignedRfqTxRaw({
   txApiClient = txApi,
   relayBroadcast = relaySignedRfqTxRaw,
   timing = null,
+  relayHeadStartMs = RFQ_RELAY_HEAD_START_MS,
 }) {
   markRfqTiming(timing, 'broadcast.start');
   const attempts = [];
+  let broadcastAccepted = false;
+
   if (relayBroadcast) {
     const relayStarted = timingNow();
     markRfqTiming(timing, 'broadcast.relay.start');
-    attempts.unshift(
-      relayBroadcast(txRaw).then((response) => ({
-        ...response,
-        confirmed: false,
-        broadcastPath: 'relay',
-        ackMs: roundMs(timingNow() - relayStarted),
-      }), (err) => {
-        markRfqTiming(timing, 'broadcast.relay.error', { message: err.message });
-        throw err;
+    const relayAttempt = relayBroadcast(txRaw).then((response) => ({
+      ...response,
+      confirmed: false,
+      broadcastPath: 'relay',
+      ackMs: roundMs(timingNow() - relayStarted),
+    }), (err) => {
+      markRfqTiming(timing, 'broadcast.relay.error', { message: err.message });
+      throw err;
+    });
+    attempts.push(
+      relayAttempt.then((response) => {
+        broadcastAccepted = true;
+        return response;
+      })
+    );
+
+    const directTrigger = relayHeadStartMs > 0
+      ? Promise.race([
+        sleep(relayHeadStartMs),
+        relayAttempt.catch(() => null),
+      ])
+      : Promise.resolve();
+    attempts.push(
+      directTrigger
+        .then(() => {
+          if (broadcastAccepted) return new Promise(() => {});
+          return directBroadcastSignedRfqTxRaw({ txRaw, txApiClient, timing });
+        })
+        .then((response) => {
+          broadcastAccepted = true;
+          return response;
+        })
+    );
+  } else {
+    attempts.push(
+      directBroadcastSignedRfqTxRaw({ txRaw, txApiClient, timing }).then((response) => {
+        broadcastAccepted = true;
+        return response;
       })
     );
   }
-  attempts.push(directBroadcastSignedRfqTxRaw({ txRaw, txApiClient, timing }));
+
   const accepted = await firstSuccessful(attempts);
   markRfqTiming(timing, 'broadcast.accepted', {
     path: accepted.broadcastPath || 'unknown',
@@ -1234,6 +1376,7 @@ export async function broadcastSignedRfqTxRaw({
     ackMs: accepted.ackMs ?? null,
     relayMs: accepted.relayMs ?? null,
     clientRelayMs: accepted.clientRelayMs ?? null,
+    duplicate: Boolean(accepted.duplicate),
   });
   if (accepted.confirmed) {
     markRfqTiming(timing, 'confirm.already_confirmed', {
