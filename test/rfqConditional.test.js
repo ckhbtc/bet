@@ -1,12 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { getEthereumAddress } from '@injectivelabs/sdk-ts';
+import { Address, getEthereumAddress } from '@injectivelabs/sdk-ts';
 import {
   buildSignedTakerIntentTypedData,
   buildTpSlConditionalOrder,
   conditionalOrderMatches,
   fetchTakerIntentState,
   serializeConditionalOrder,
+  submitConditionalOrder,
   verifyConditionalOrderStored,
 } from '../src/services/rfqConditional.js';
 import {
@@ -123,6 +124,49 @@ test('buildSignedTakerIntentTypedData matches RFQ conditional order EIP-712 shap
   assert.equal(typedData.message.allowedRelayer, '0x0000000000000000000000000000000000000000');
   assert.equal(typedData.message.epoch, '4');
   assert.equal(typedData.message.laneVersion, '7');
+});
+
+test('submitConditionalOrder signs with the current granter-derived EVM address', async () => {
+  const granterEthAddress = '0x1111111111111111111111111111111111111111';
+  const granterAddress = Address.fromHex(granterEthAddress).toBech32();
+  const staleSessionEthAddress = '0x2222222222222222222222222222222222222222';
+  const order = buildTpSlConditionalOrder({
+    market,
+    side: 'long',
+    quantity: '5',
+    triggerPrice: '110',
+    rfqId: 123,
+  });
+
+  let signedIntent = null;
+  let expectedEthAddress = null;
+  let submittedOrder = null;
+  await submitConditionalOrder({
+    session: {
+      granterAddress,
+      ethAddress: staleSessionEthAddress,
+    },
+    order,
+    laneState: { epoch: 4, laneVersion: 7 },
+    deadlineMs: 1770000000000,
+    cid: 'cid-1',
+    signIntent: async (intent, options) => {
+      signedIntent = intent;
+      expectedEthAddress = options.expectedEthAddress;
+      return '0x' + '11'.repeat(65);
+    },
+    rfqApiClient: {
+      async createConditionalOrder(request) {
+        submittedOrder = request.order;
+        return { order: { ...request.order, status: 'pending_trigger' } };
+      },
+    },
+  });
+
+  assert.equal(signedIntent.takerEthAddress, getEthereumAddress(granterAddress));
+  assert.equal(expectedEthAddress, getEthereumAddress(granterAddress));
+  assert.notEqual(signedIntent.takerEthAddress, staleSessionEthAddress);
+  assert.equal(submittedOrder.taker, granterAddress);
 });
 
 test('fetchTakerIntentState parses contract lane counters', async () => {

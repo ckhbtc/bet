@@ -401,10 +401,11 @@ export async function submitConditionalOrder({
   rfqApiClient = rfqApi,
   signIntent = signConditionalOrderIntent,
 }) {
+  const takerEthAddress = getEthereumAddress(session.granterAddress);
   const intent = {
     cid,
     deadlineMs,
-    takerEthAddress: session.ethAddress,
+    takerEthAddress,
     allowedRelayer: '',
     rfqId: order.rfqId,
     margin: order.margin,
@@ -422,7 +423,7 @@ export async function submitConditionalOrder({
     worstPrice: order.worstPrice,
   };
   const signature = await signIntent(intent, {
-    expectedEthAddress: session.ethAddress,
+    expectedEthAddress: takerEthAddress,
   });
   if (!signature) throw new Error('No take-profit signature returned by wallet');
 
