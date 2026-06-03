@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import useSessionStore from '../stores/sessionStore';
 import useWalletStore from '../stores/walletStore';
+import { formatUsdcBalance } from '../data/mockData';
 import BridgeModal from './BridgeModal';
 
 export default function AuthZSetup() {
@@ -78,7 +79,7 @@ export default function AuthZSetup() {
         fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.5,
       }}>
         {usdcBalance > 0
-          ? <>You have <span style={{ color: 'var(--green)', fontFamily: 'var(--font-mono)' }}>${usdcBalance.toFixed(2)}</span> USDC ready to bet.</>
+          ? <>You have <span style={{ color: 'var(--green)', fontFamily: 'var(--font-mono)' }}>${formatUsdcBalance(usdcBalance)}</span> USDC ready to bet.</>
           : 'No funds yet?'}{' '}
         <button
           onClick={() => setShowBridge(true)}
@@ -88,7 +89,7 @@ export default function AuthZSetup() {
             fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-heading)',
             textDecoration: 'underline',
           }}
-        >Bridge from Arbitrum →</button>
+        >Bridge USDC →</button>
       </div>
 
       {showBridge && <BridgeModal onClose={() => setShowBridge(false)} />}
