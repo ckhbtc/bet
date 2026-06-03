@@ -45,7 +45,12 @@ router.post('/rfq-broadcast', async (req, res) => {
       txBytes: typeof txBytes === 'string' ? txBytes.length : 0,
     }));
     const result = await relayRfqBroadcast({ txBytes });
-    res.json({ ok: true, txHash: result.txHash, relayMs: result.relayMs });
+    res.json({
+      ok: true,
+      txHash: result.txHash,
+      relayMs: result.relayMs,
+      duplicate: Boolean(result.duplicate),
+    });
   } catch (err) {
     const code = /Invalid/.test(err.message) ? 400 : 502;
     res.status(code).json({ error: err.message });

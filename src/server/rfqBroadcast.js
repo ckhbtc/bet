@@ -1,3 +1,5 @@
+import { createHash } from 'node:crypto';
+
 const DEFAULT_LCD_URLS = ['https://sentry.lcd.injective.network'];
 const DEFAULT_RPC_URLS = ['https://sentry.tm.injective.network'];
 const TX_BYTES_RE = /^[A-Za-z0-9+/]+={0,2}$/;
@@ -35,7 +37,30 @@ function validateTxBytes(txBytes) {
   }
 }
 
-async function postBroadcast(url, txBytes) {
+export function txHashFromBase64(txBytes) {
+  return createHash('sha256')
+    .update(Buffer.from(txBytes, 'base64'))
+    .digest('hex')
+    .toUpperCase();
+}
+
+function isDuplicateBroadcast({ code, message }) {
+  if (Number(code || 0) === 19) return true;
+  return /already.*(cache|mempool)|tx.*already|duplicate/i.test(String(message || ''));
+}
+
+function duplicateBroadcastResult({ txHash, endpoint, started, source, message = '' }) {
+  return {
+    txHash,
+    relayMs: Date.now() - started,
+    endpoint,
+    duplicate: true,
+    source,
+    message,
+  };
+}
+
+async function postBroadcast(url, txBytes, expectedTxHash) {
   const started = Date.now();
   const response = await fetch(url, {
     method: 'POST',
@@ -48,19 +73,39 @@ async function postBroadcast(url, txBytes) {
   const body = await response.json().catch(() => ({}));
   const txResponse = body?.tx_response;
   if (!response.ok || !txResponse) {
-    throw new Error(body?.message || body?.error || `LCD broadcast failed (${response.status})`);
+    const message = body?.message || body?.error || `LCD broadcast failed (${response.status})`;
+    if (isDuplicateBroadcast({ message })) {
+      return duplicateBroadcastResult({
+        txHash: expectedTxHash,
+        endpoint: url,
+        started,
+        source: 'lcd',
+        message,
+      });
+    }
+    throw new Error(message);
   }
   if (Number(txResponse.code || 0) !== 0) {
-    throw new Error(txResponse.raw_log || `LCD broadcast failed (code ${txResponse.code})`);
+    const message = txResponse.raw_log || `LCD broadcast failed (code ${txResponse.code})`;
+    if (isDuplicateBroadcast({ code: txResponse.code, message })) {
+      return duplicateBroadcastResult({
+        txHash: txResponse.txhash || expectedTxHash,
+        endpoint: url,
+        started,
+        source: 'lcd',
+        message,
+      });
+    }
+    throw new Error(message);
   }
   return {
-    txHash: txResponse.txhash,
+    txHash: txResponse.txhash || expectedTxHash,
     relayMs: Date.now() - started,
     endpoint: url,
   };
 }
 
-async function postRpcBroadcast(url, txBytes) {
+async function postRpcBroadcast(url, txBytes, expectedTxHash) {
   const started = Date.now();
   const response = await fetch(url, {
     method: 'POST',
@@ -75,13 +120,33 @@ async function postRpcBroadcast(url, txBytes) {
   const body = await response.json().catch(() => ({}));
   const result = body?.result;
   if (!response.ok || body?.error || !result) {
-    throw new Error(body?.error?.message || `RPC broadcast failed (${response.status})`);
+    const message = body?.error?.message || `RPC broadcast failed (${response.status})`;
+    if (isDuplicateBroadcast({ message })) {
+      return duplicateBroadcastResult({
+        txHash: expectedTxHash,
+        endpoint: url,
+        started,
+        source: 'rpc',
+        message,
+      });
+    }
+    throw new Error(message);
   }
   if (Number(result.code || 0) !== 0) {
-    throw new Error(result.log || `RPC broadcast failed (code ${result.code})`);
+    const message = result.log || `RPC broadcast failed (code ${result.code})`;
+    if (isDuplicateBroadcast({ code: result.code, message })) {
+      return duplicateBroadcastResult({
+        txHash: result.hash || expectedTxHash,
+        endpoint: url,
+        started,
+        source: 'rpc',
+        message,
+      });
+    }
+    throw new Error(message);
   }
   return {
-    txHash: result.hash,
+    txHash: result.hash || expectedTxHash,
     relayMs: Date.now() - started,
     endpoint: url,
   };
@@ -90,9 +155,10 @@ async function postRpcBroadcast(url, txBytes) {
 export async function relayRfqBroadcast({ txBytes }) {
   validateTxBytes(txBytes);
   const started = Date.now();
+  const expectedTxHash = txHashFromBase64(txBytes);
   const attempts = [
-    ...rpcBroadcastUrls().map((url) => postRpcBroadcast(url, txBytes)),
-    ...lcdBroadcastUrls().map((url) => postBroadcast(url, txBytes)),
+    ...rpcBroadcastUrls().map((url) => postRpcBroadcast(url, txBytes, expectedTxHash)),
+    ...lcdBroadcastUrls().map((url) => postBroadcast(url, txBytes, expectedTxHash)),
   ];
   try {
     const result = await Promise.any(attempts);
@@ -101,6 +167,7 @@ export async function relayRfqBroadcast({ txBytes }) {
       txHash: result.txHash,
       endpoint: result.endpoint,
       relayMs: result.relayMs,
+      duplicate: Boolean(result.duplicate),
       totalMs: Date.now() - started,
     }));
     return result;
