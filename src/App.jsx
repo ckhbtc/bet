@@ -16,17 +16,61 @@ import AuthZSetup from './components/AuthZSetup';
 import BridgeModal from './components/BridgeModal';
 import Confetti from './components/Confetti';
 import TransactionStatus from './components/TransactionStatus';
-import { primeRfqAccountCache, tradeCloseRfq, tradeOpenRfq } from './services/rfq';
+import {
+  buildRfqCloseInput,
+  primeRfqAccountCache,
+  sendRfqPrequoteRequest,
+  tradeCloseRfq,
+  tradeOpenRfq,
+} from './services/rfq';
+import { RFQ_PREQUOTE_INTERVAL_MS } from './services/rfqConstants';
 import { getOpenTradeStatus } from './services/tradeResult';
 import useWalletStore from './stores/walletStore';
 import useMarketStore from './stores/marketStore';
 import useSessionStore from './stores/sessionStore';
+import { nextOpenPnlGraceExpiresAt } from './stores/optimisticPositions';
 
 function latestCachedPrice(marketId, fallback = null) {
   const state = useMarketStore.getState();
   return state.prices[marketId]
     || state.markets.find(market => market.marketId === marketId)?.price
     || fallback;
+}
+
+function buildOptimisticOpenPosition(bet) {
+  const side = bet.direction === 'up' ? 'long' : 'short';
+  const entryPrice = latestCachedPrice(bet.market.marketId, bet.market.price) || bet.market.price || 0;
+  const quantity = entryPrice > 0
+    ? String((Number(bet.stake) * Number(bet.leverage)) / entryPrice)
+    : '0';
+
+  return {
+    id: `${bet.market.marketId}_${side}`,
+    symbol: bet.market.symbol,
+    ticker: bet.market.ticker || bet.market.name || bet.market.marketId,
+    marketId: bet.market.marketId,
+    market: bet.market,
+    side,
+    direction: side === 'long' ? 'up' : 'down',
+    quantity,
+    entryPrice,
+    markPrice: entryPrice,
+    margin: Number(bet.stake) || 0,
+    liqPrice: bet.liqPrice || null,
+    tpPrice: bet.targetPrice || null,
+    targetMode: bet.targetMode || 'take_profit',
+    letItRide: !bet.targetPrice,
+    pnl: 0,
+    pnlPct: 0,
+    stake: Number(bet.stake) || 0,
+    currentPrice: entryPrice,
+    asset: bet.market.symbol,
+    logo: bet.market.logo || '',
+    tokenName: bet.market.tokenName || '',
+    slug: bet.market.slug || '',
+    status: 'opening',
+    optimisticConfirmed: false,
+  };
 }
 
 export default function App() {
@@ -99,6 +143,47 @@ export default function App() {
     });
   }, [connected, injAddress, session.rfqReady]);
 
+  useEffect(() => {
+    if (!connected || !injAddress || !session.rfqReady || view !== 'bets' || !positions.length) return;
+
+    let cancelled = false;
+    const sendCashOutPrequotes = async () => {
+      if (cancelled) return;
+      const warmupPositions = positions.filter(position => position.market && position.side).slice(0, 8);
+      for (const position of warmupPositions) {
+        const price = position.markPrice
+          || position.currentPrice
+          || latestCachedPrice(position.marketId, position.market?.price);
+        if (!price || Number(price) <= 0) continue;
+        try {
+          const input = buildRfqCloseInput({
+            market: position.market,
+            oraclePrice: price,
+            side: position.side,
+            quantity: position.quantity,
+          });
+          await sendRfqPrequoteRequest({
+            requestAddress: injAddress,
+            marketId: position.marketId,
+            ...input,
+          });
+        } catch {
+          // Warmup only; click-time cash-out still validates and reports errors.
+        }
+      }
+    };
+
+    void sendCashOutPrequotes();
+    const interval = setInterval(() => {
+      void sendCashOutPrequotes();
+    }, RFQ_PREQUOTE_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [connected, injAddress, session.rfqReady, view, positions]);
+
   // Start polling when wallet connects
   useEffect(() => {
     if (connected && injAddress) {
@@ -112,14 +197,10 @@ export default function App() {
     setSelectedMarket(market);
   }, []);
 
-  const handleBetConfirm = useCallback((bet) => {
-    setPendingBet(bet);
-  }, []);
+  const submitBet = useCallback(async (bet) => {
+    if (!bet || !connected) return;
 
-  const handleLockIn = useCallback(async () => {
-    if (!pendingBet || !connected) return;
-
-    const needsTakeProfitSignature = pendingBet.targetPrice && Number(pendingBet.targetPrice) > 0;
+    const needsTakeProfitSignature = bet.targetPrice && Number(bet.targetPrice) > 0;
 
     setTxStatus({
       type: 'loading',
@@ -128,20 +209,40 @@ export default function App() {
     setPendingBet(null);
 
     let openConfirmed = false;
+    let openMatched = false;
+    let optimisticPositionId = null;
+
+    const showOptimisticOpen = () => {
+      if (openMatched) return;
+      openMatched = true;
+      const optimisticPosition = buildOptimisticOpenPosition(bet);
+      optimisticPositionId = optimisticPosition.id;
+      useMarketStore.getState().addOptimisticPosition(optimisticPosition);
+      setTxStatus(null);
+      setSelectedMarket(null);
+      setView('bets');
+      setConfetti(true);
+      setTimeout(() => setConfetti(false), 3500);
+    };
+
     const settleOpenConfirmed = (result) => {
       if (openConfirmed) return;
       openConfirmed = true;
+      if (!openMatched) showOptimisticOpen();
+      if (optimisticPositionId) {
+        useMarketStore.getState().updateOptimisticPosition(optimisticPositionId, {
+          optimisticConfirmed: true,
+          txHash: result?.txHash || null,
+          pnlGraceExpiresAt: nextOpenPnlGraceExpiresAt(),
+        });
+      }
       setTxStatus({
-        type: needsTakeProfitSignature ? 'loading' : 'success',
+        type: needsTakeProfitSignature ? 'info' : 'success',
         message: needsTakeProfitSignature
           ? 'next, confirm the take profit order through your connected wallet'
           : 'Order confirmed.',
         txHash: result?.txHash,
       });
-      setSelectedMarket(null);
-      setView('bets');
-      setConfetti(true);
-      setTimeout(() => setConfetti(false), 3500);
       refreshBalances();
       useMarketStore.getState().fetchPositions(useWalletStore.getState().injAddress);
     };
@@ -149,16 +250,16 @@ export default function App() {
     try {
       const result = await tradeOpenRfq({
         granterAddress: injAddress,
-        marketId: pendingBet.market.marketId,
-        side: pendingBet.direction === 'up' ? 'long' : 'short',
-        stakeUsdt: pendingBet.stake,
-        leverage: pendingBet.leverage,
-        tpPrice: pendingBet.targetPrice,
-        market: pendingBet.market,
-        oraclePrice: latestCachedPrice(pendingBet.market.marketId, pendingBet.market.price),
+        marketId: bet.market.marketId,
+        side: bet.direction === 'up' ? 'long' : 'short',
+        stakeUsdt: bet.stake,
+        leverage: bet.leverage,
+        tpPrice: bet.targetPrice,
+        market: bet.market,
+        oraclePrice: latestCachedPrice(bet.market.marketId, bet.market.price),
         onProgress: ({ phase, result: progressResult }) => {
           if (phase === 'matched') {
-            setTxStatus({ type: 'loading', message: 'Order matched.' });
+            showOptimisticOpen();
           }
           if (phase === 'confirmed') {
             settleOpenConfirmed(progressResult);
@@ -172,10 +273,27 @@ export default function App() {
 
       clearTxStatusSoon();
     } catch (err) {
+      if (optimisticPositionId) {
+        useMarketStore.getState().removeOptimisticPosition(optimisticPositionId);
+      }
       setTxStatus({ type: 'error', message: err.message });
       clearTxStatusSoon();
     }
-  }, [pendingBet, connected, injAddress, refreshBalances, clearTxStatusSoon]);
+  }, [connected, injAddress, refreshBalances, clearTxStatusSoon]);
+
+  const handleBetConfirm = useCallback((bet) => {
+    const hasTakeProfit = bet.targetPrice && Number(bet.targetPrice) > 0;
+    if (bet.targetMode === 'yolo' || !hasTakeProfit) {
+      void submitBet(bet);
+      return;
+    }
+
+    setPendingBet(bet);
+  }, [submitBet]);
+
+  const handleLockIn = useCallback(() => {
+    void submitBet(pendingBet);
+  }, [pendingBet, submitBet]);
 
   const handleCashOut = useCallback(async (position) => {
     if (!connected || !position.market) return;
@@ -183,9 +301,22 @@ export default function App() {
     setTxStatus({ type: 'loading', message: 'Submitting cash-out order' });
 
     let closeConfirmed = false;
+    let closeMatched = false;
+    const optimisticCloseId = position.id;
+
+    const showOptimisticClose = () => {
+      if (closeMatched) return;
+      closeMatched = true;
+      useMarketStore.getState().addOptimisticClosedPosition(position);
+      setTxStatus(null);
+      setConfetti(true);
+      setTimeout(() => setConfetti(false), 3500);
+    };
+
     const settleCloseConfirmed = (result) => {
       if (closeConfirmed) return;
       closeConfirmed = true;
+      if (!closeMatched) showOptimisticClose();
       setTxStatus({
         type: 'success',
         message: 'Cash-out order confirmed',
@@ -207,7 +338,7 @@ export default function App() {
           || latestCachedPrice(position.marketId, position.market?.price),
         onProgress: ({ phase, result: progressResult }) => {
           if (phase === 'matched') {
-            setTxStatus({ type: 'loading', message: 'Cash-out order matched' });
+            showOptimisticClose();
           }
           if (phase === 'confirmed') {
             settleCloseConfirmed(progressResult);
@@ -219,6 +350,9 @@ export default function App() {
 
       clearTxStatusSoon();
     } catch (err) {
+      if (closeMatched) {
+        useMarketStore.getState().removeOptimisticClosedPosition(optimisticCloseId, position);
+      }
       setTxStatus({ type: 'error', message: err.message });
       clearTxStatusSoon();
     }
@@ -303,7 +437,7 @@ export default function App() {
 
       <div style={{
         flex: 1, display: 'flex', maxWidth: 1200,
-        margin: '0 auto', width: '100%', padding: '24px 24px', gap: 24,
+        margin: '0 auto', width: '100%', padding: '24px 24px', gap: 18,
       }}>
         {/* Main content */}
         <div style={{ flex: 1, minWidth: 0 }}>
@@ -328,7 +462,7 @@ export default function App() {
               </div>
               <div style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 360px), 1fr))',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 250px), 1fr))',
                 gap: 12,
               }}>
                 {markets.map(market => (
@@ -372,6 +506,7 @@ export default function App() {
                 <BetPanel
                   market={selectedMarket}
                   balance={usdcBalance}
+                  requestAddress={injAddress}
                   rfqReady={session.rfqReady}
                   onConfirm={handleBetConfirm}
                   onClose={() => setSelectedMarket(null)}
@@ -384,9 +519,6 @@ export default function App() {
             <>
               <div style={{ marginBottom: 24 }}>
                 <h1 style={{ fontSize: 32, fontWeight: 700, letterSpacing: -1, marginBottom: 6 }}>My Bets</h1>
-                <p style={{ fontSize: 14, color: 'var(--text-muted)' }}>
-                  {positions.length} active position{positions.length !== 1 ? 's' : ''}
-                </p>
               </div>
               {connected ? (
                 <ActiveBets
@@ -404,61 +536,6 @@ export default function App() {
           )}
 
         </div>
-
-        {/* Sidebar — active positions summary */}
-        {view === 'home' && !selectedMarket && positions.length > 0 && (
-          <div style={{ width: 280, flexShrink: 0 }}>
-            <div style={{
-              background: 'var(--bg-card)', border: '1px solid var(--border)',
-              borderRadius: 12, padding: 16, position: 'sticky', top: 100,
-            }}>
-              <div style={{
-                fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase',
-                letterSpacing: 2, marginBottom: 12,
-              }}>Active Positions</div>
-              {positions.slice(0, 3).map(pos => (
-                <div key={pos.id} style={{
-                  display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-                  padding: '8px 0', borderBottom: '1px solid var(--border)',
-                }}>
-                  <div>
-                    <span style={{ fontSize: 13, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-                      {pos.asset}
-                      <span style={{
-                        fontSize: 10, fontWeight: 700,
-                        padding: '2px 6px', borderRadius: 4,
-                        background: pos.direction === 'up' ? 'var(--green-dim)' : 'var(--red-dim)',
-                        color: pos.direction === 'up' ? 'var(--green)' : 'var(--red)',
-                        textTransform: 'uppercase', letterSpacing: 0.5,
-                        fontFamily: 'var(--font-heading)',
-                      }}>
-                        {pos.direction === 'up' ? 'Up' : 'Down'}
-                      </span>
-                    </span>
-                    <div style={{ fontSize: 10, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-                      ${pos.stake.toFixed(2)} bet
-                    </div>
-                  </div>
-                  <span style={{
-                    fontSize: 14, fontWeight: 600, fontFamily: 'var(--font-mono)',
-                    color: pos.pnl >= 0 ? 'var(--green)' : 'var(--red)',
-                  }}>
-                    {pos.pnl >= 0 ? '+' : '-'}${Math.abs(pos.pnl).toFixed(2)}
-                  </span>
-                </div>
-              ))}
-              <button
-                onClick={() => setView('bets')}
-                style={{
-                  width: '100%', marginTop: 12, background: 'var(--bg-primary)',
-                  border: '1px solid var(--border)', borderRadius: 8,
-                  padding: '8px 0', color: 'var(--accent)', fontSize: 12,
-                  fontWeight: 500, cursor: 'pointer', fontFamily: 'var(--font-heading)',
-                }}
-              >View All Positions →</button>
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Modals */}
