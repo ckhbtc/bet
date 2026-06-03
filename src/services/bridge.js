@@ -20,6 +20,7 @@ import {
   http,
   fallback,
   parseUnits,
+  formatUnits,
   pad,
   getAddress,
   isAddress,
@@ -51,6 +52,41 @@ function publicClient(c) {
     chain: viemChain(c),
     transport: fallback(c.rpcs.map((url) => http(url, { timeout: 8000 }))),
   });
+}
+
+async function fetchInjectiveEvmUsdcBalanceUnits(ethAddress) {
+  return publicClient(INJECTIVE).readContract({
+    address: INJECTIVE.usdc,
+    abi: ERC20_ABI,
+    functionName: 'balanceOf',
+    args: [getAddress(ethAddress)],
+  });
+}
+
+export async function fetchInjectiveEvmUsdcBalance(ethAddress) {
+  const units = await fetchInjectiveEvmUsdcBalanceUnits(ethAddress);
+  return Number(formatUnits(units, 6));
+}
+
+async function waitForInjectiveEvmUsdcBalance({
+  ethAddress,
+  targetUnits,
+  timeoutMs = 6_000,
+  intervalMs = 500,
+}) {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    try {
+      const units = await fetchInjectiveEvmUsdcBalanceUnits(ethAddress);
+      if (units >= targetUnits) return Number(formatUnits(units, 6));
+    } catch {
+      // The portfolio indexer poll remains the fallback signal.
+    }
+    await sleep(intervalMs);
+  }
+
+  return null;
 }
 
 function walletClient(chain) {
@@ -273,6 +309,7 @@ export async function executeBridge({
   const senderChecksummed = getAddress(senderEvm);
 
   const srcPublic = publicClient(src);
+  const startingInjectiveUsdc = await fetchInjectiveEvmUsdcBalanceUnits(recipientChecksummed).catch(() => null);
 
   // Resolve burn params before we ask the wallet for anything — a Fast-mode
   // route problem should surface as a plain error, not a wallet popup.
@@ -335,7 +372,24 @@ export async function executeBridge({
   // pays no INJ-EVM gas and doesn't have to switch chains back.
   onPhase('mint-submit', { dst: INJECTIVE.name });
   const { txHash: mintHash } = await api.relayMint(message, attestation);
+  const targetInjectiveUsdc = startingInjectiveUsdc != null ? startingInjectiveUsdc + amount : null;
+  let evmUsdcBalance = null;
+
+  if (targetInjectiveUsdc != null) {
+    onPhase('mint-confirm', { txHash: mintHash, dst: INJECTIVE.name });
+    evmUsdcBalance = await waitForInjectiveEvmUsdcBalance({
+      ethAddress: recipientChecksummed,
+      targetUnits: targetInjectiveUsdc,
+    });
+  }
 
   onPhase('success', { burnHash, mintHash, src: src.name });
-  return { burnHash, mintHash, srcName: src.name, srcExplorer: src.explorer };
+  return {
+    burnHash,
+    mintHash,
+    srcName: src.name,
+    srcExplorer: src.explorer,
+    evmBalanceConfirmed: evmUsdcBalance != null,
+    evmUsdcBalance,
+  };
 }

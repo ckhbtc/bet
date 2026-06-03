@@ -13,6 +13,7 @@ import {
 import { isPositiveTokenAmount, sanitizeDecimalInput } from '../services/bridgeAmount';
 import { txExplorerUrl } from '../services/explorer';
 import useWalletStore from '../stores/walletStore';
+import { formatUsdcBalance } from '../data/mockData';
 
 // Human-readable status copy keyed by the phase emitted by executeBridge().
 const PHASE_COPY = {
@@ -22,6 +23,7 @@ const PHASE_COPY = {
   'burn-confirm':    'Burning on source chain...',
   attest:            'Waiting for Circle attestation (1–13 min)...',
   'mint-submit':     'Minting native USDC on Injective...',
+  'mint-confirm':    'Confirming native USDC balance...',
   success:           'Bridge complete',
 };
 
@@ -30,7 +32,14 @@ function shortHash(h) {
 }
 
 export default function BridgeModal({ onClose }) {
-  const { ethAddress, injAddress, refreshBalances, pollBalancesUntilChange } = useWalletStore();
+  const {
+    ethAddress,
+    injAddress,
+    usdcBalance,
+    refreshBalances,
+    pollBalancesUntilChange,
+    applyUsdcBalanceFloor,
+  } = useWalletStore();
 
   const [sourceChainId, setSourceChainId] = useState(SOURCE_CHAINS[0].id);
   const [amount, setAmount] = useState('');
@@ -102,6 +111,7 @@ export default function BridgeModal({ onClose }) {
 
   const handleBridge = useCallback(async () => {
     if (!isPositiveTokenAmount(amount)) return;
+    const usdcBalanceBefore = usdcBalance || 0;
     setError(null); setSuccess(null);
     setBridging(true); setPhase(null); setPhaseData(null);
     try {
@@ -114,11 +124,21 @@ export default function BridgeModal({ onClose }) {
         onPhase: (p, data) => { setPhase(p); setPhaseData(data || null); },
       });
       setSuccess(result);
-      // Optimistic kick first so the TopBar pill updates promptly, then
-      // poll until the indexer catches up to the freshly-minted amount.
-      refreshBalances();
       const expectedDelta = Number(amount) || 0;
-      pollBalancesUntilChange({ expectedDelta }).catch(() => {});
+      const expectedBalance = usdcBalanceBefore + expectedDelta;
+
+      // The portfolio indexer can lag the confirmed CCTP mint. If the EVM
+      // USDC balance proves the mint landed, hold the UI at that expected
+      // total until the portfolio indexer catches up.
+      if (result.evmBalanceConfirmed) {
+        applyUsdcBalanceFloor(expectedBalance);
+      }
+
+      refreshBalances();
+      pollBalancesUntilChange({
+        expectedDelta,
+        startBalance: usdcBalanceBefore,
+      }).catch(() => {});
     } catch (err) {
       const msg = err.shortMessage || err.message || String(err);
       setError(
@@ -130,8 +150,8 @@ export default function BridgeModal({ onClose }) {
       setBridging(false);
     }
   }, [
-    amount, sourceChainId, ethAddress, injAddress, transferMode,
-    refreshBalances, pollBalancesUntilChange,
+    amount, sourceChainId, ethAddress, injAddress, usdcBalance, transferMode,
+    refreshBalances, pollBalancesUntilChange, applyUsdcBalanceFloor,
   ]);
 
   const handleMax = () => {
@@ -143,9 +163,7 @@ export default function BridgeModal({ onClose }) {
 
   const balanceLabel =
     srcBalance != null
-      ? `${Number(formatUnits(srcBalance, 6)).toLocaleString(undefined, {
-          minimumFractionDigits: 2, maximumFractionDigits: 6,
-        })} USDC`
+      ? `${formatUsdcBalance(formatUnits(srcBalance, 6))} USDC`
       : balanceErr
         ? 'unavailable'
         : '…';

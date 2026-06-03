@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { connectWallet, onAccountsChanged } from '../services/wallet';
 import { fetchBalances } from '../services/injective';
 import { clearGrantee } from '../services/grantee';
+import { visibleUsdcBalanceState } from './walletBalance.js';
 
 // Load sessionStore lazily to avoid circular module init.
 function clearSession(granterAddress) {
@@ -27,6 +28,8 @@ const useWalletStore = create((set, get) => ({
   connecting: false,
   balances: null,
   usdcBalance: 0,
+  usdcBalanceFloor: null,
+  usdcBalanceFloorExpiresAt: 0,
   error: null,
 
   connect: async () => {
@@ -50,11 +53,11 @@ const useWalletStore = create((set, get) => ({
         if (!info) {
           clearAccountsChangedListener();
           clearSession(prev);
-          set({ ethAddress: null, injAddress: null, subaccountId: null, connected: false, balances: null, usdcBalance: 0 });
+          set({ ethAddress: null, injAddress: null, subaccountId: null, connected: false, balances: null, usdcBalance: 0, usdcBalanceFloor: null, usdcBalanceFloorExpiresAt: 0 });
         } else if (info.injAddress !== prev) {
           // Different wallet swapped in — the old session must not carry over.
           clearSession(prev);
-          set({ ethAddress: info.ethAddress, injAddress: info.injAddress, subaccountId: info.subaccountId, balances: null, usdcBalance: 0 });
+          set({ ethAddress: info.ethAddress, injAddress: info.injAddress, subaccountId: info.subaccountId, balances: null, usdcBalance: 0, usdcBalanceFloor: null, usdcBalanceFloorExpiresAt: 0 });
           get().refreshBalances();
         } else {
           // Same wallet — benign event, just refresh balances.
@@ -78,6 +81,8 @@ const useWalletStore = create((set, get) => ({
       connected: false,
       balances: null,
       usdcBalance: 0,
+      usdcBalanceFloor: null,
+      usdcBalanceFloorExpiresAt: 0,
       error: null,
     });
   },
@@ -87,10 +92,34 @@ const useWalletStore = create((set, get) => ({
     if (!injAddress) return;
     try {
       const balances = await fetchBalances(injAddress);
-      set({ balances, usdcBalance: balances.usdcTotal });
+      set(state => ({
+        balances,
+        ...visibleUsdcBalanceState({
+          fetchedTotal: balances.usdcTotal,
+          floor: state.usdcBalanceFloor,
+          floorExpiresAt: state.usdcBalanceFloorExpiresAt,
+        }),
+      }));
     } catch (err) {
       console.error('Failed to fetch balances:', err);
     }
+  },
+
+  applyUsdcBalanceFloor: (floor, ttlMs = 45_000) => {
+    const floorValue = Number(floor);
+    if (!Number.isFinite(floorValue) || floorValue <= 0) return;
+
+    set(state => {
+      const activeFloor = state.usdcBalanceFloorExpiresAt > Date.now()
+        ? Number(state.usdcBalanceFloor) || 0
+        : 0;
+      const nextFloor = Math.max(activeFloor, floorValue);
+      return {
+        usdcBalance: Math.max(state.usdcBalance || 0, nextFloor),
+        usdcBalanceFloor: nextFloor,
+        usdcBalanceFloorExpiresAt: Date.now() + ttlMs,
+      };
+    });
   },
 
   // Poll fetchBalances until usdcTotal exceeds the starting snapshot, or
@@ -102,19 +131,28 @@ const useWalletStore = create((set, get) => ({
   // may briefly report 11.999 due to precision rounding).
   pollBalancesUntilChange: async ({
     timeoutMs = 30_000,
-    intervalMs = 2_000,
+    intervalMs = 750,
     expectedDelta = 0,
+    startBalance = null,
   } = {}) => {
     const { injAddress } = get();
     if (!injAddress) return false;
-    const start = get().usdcBalance || 0;
+    const explicitStart = Number(startBalance);
+    const start = Number.isFinite(explicitStart) ? explicitStart : (get().usdcBalance || 0);
     const target = start + Math.max(0, expectedDelta * 0.99); // 1% slack
     const deadline = Date.now() + timeoutMs;
 
     while (Date.now() < deadline) {
       try {
         const balances = await fetchBalances(injAddress);
-        set({ balances, usdcBalance: balances.usdcTotal });
+        set(state => ({
+          balances,
+          ...visibleUsdcBalanceState({
+            fetchedTotal: balances.usdcTotal,
+            floor: state.usdcBalanceFloor,
+            floorExpiresAt: state.usdcBalanceFloorExpiresAt,
+          }),
+        }));
         if (balances.usdcTotal > start && balances.usdcTotal >= target) {
           return true;
         }
