@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { formatDollar, formatPrice, liquidationPrice } from '../data/mockData';
 import ProgressBar from './ProgressBar';
 import CoinLogo from './CoinLogo';
@@ -6,16 +7,26 @@ const STATUS_CONFIG = {
   winning: { label: 'WINNING', bg: 'var(--green-dim)', border: 'var(--green)', color: 'var(--green)' },
   at_risk: { label: 'AT RISK', bg: 'var(--red-dim)', border: 'var(--red)', color: 'var(--red)' },
   close:   { label: 'CLOSE',   bg: 'var(--accent-dim)', border: 'var(--accent)', color: 'var(--accent)' },
+  opening: { label: 'MATCHED', bg: 'var(--accent-dim)', border: 'var(--accent)', color: 'var(--accent)' },
 };
 
 export default function ActiveBets({ bets, onCashOut, onCashOutAll, devMode }) {
+  const [now, setNow] = useState(() => Date.now());
+  const hasOpenPnlGrace = bets.some(bet => Number(bet.pnlGraceExpiresAt || 0) > now);
+
+  useEffect(() => {
+    if (!hasOpenPnlGrace) return undefined;
+
+    const interval = setInterval(() => setNow(Date.now()), 500);
+    return () => clearInterval(interval);
+  }, [hasOpenPnlGrace]);
+
   if (!bets.length) {
     return (
-      <div style={{
-        textAlign: 'center', padding: '60px 20px',
-        color: 'var(--text-muted)', fontSize: 14,
-      }}>
-        No active positions. Place your first bet to get started!
+      <div className="empty-bets-stage" aria-live="polite">
+        <div className="empty-bets-banner">
+          <span className="empty-bets-word">NO POSITIONS YET</span>
+        </div>
       </div>
     );
   }
@@ -38,9 +49,18 @@ export default function ActiveBets({ bets, onCashOut, onCashOutAll, devMode }) {
         >Cash Out All ({bets.length})</button>
       )}
       {bets.map(bet => {
-        const status = STATUS_CONFIG[bet.status] || STATUS_CONFIG.close;
-        const isPositive = bet.pnl >= 0;
+        const inOpenPnlGrace = Number(bet.pnlGraceExpiresAt || 0) > now;
+        const status = inOpenPnlGrace
+          ? STATUS_CONFIG.winning
+          : (STATUS_CONFIG[bet.status] || STATUS_CONFIG.close);
+        const statusLabel = bet.optimistic
+          ? (bet.optimisticConfirmed ? 'CONFIRMED' : 'MATCHED')
+          : status.label;
+        const displayPnl = inOpenPnlGrace ? 0 : bet.pnl;
+        const displayPnlPct = inOpenPnlGrace ? 0 : bet.pnlPct;
+        const isPositive = inOpenPnlGrace || displayPnl >= 0;
         const priceDecimals = bet.market?.priceDecimals;
+        const cashOutDisabled = Boolean(bet.optimistic);
 
         return (
           <div key={bet.id} style={{
@@ -48,6 +68,8 @@ export default function ActiveBets({ bets, onCashOut, onCashOutAll, devMode }) {
             border: `1px solid ${status.border}`,
             borderRadius: 12,
             overflow: 'hidden',
+            boxShadow: bet.optimistic ? '6px 6px 0 var(--accent-light)' : 'none',
+            animation: bet.optimistic ? 'slide-up 0.2s ease' : undefined,
           }}>
             {/* Status banner */}
             <div style={{
@@ -57,7 +79,7 @@ export default function ActiveBets({ bets, onCashOut, onCashOutAll, devMode }) {
               <span style={{
                 fontSize: 10, fontWeight: 700, letterSpacing: 2,
                 color: status.color, textTransform: 'uppercase',
-              }}>{status.label}</span>
+              }}>{statusLabel}</span>
             </div>
 
             <div style={{ padding: 16 }}>
@@ -67,7 +89,7 @@ export default function ActiveBets({ bets, onCashOut, onCashOutAll, devMode }) {
                 marginBottom: 16,
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <CoinLogo symbol={bet.asset} size={32} />
+                  <CoinLogo symbol={bet.asset} logoUrl={bet.logo || bet.market?.logo} size={32} />
                   <div>
                     <div style={{
                       fontSize: 18, fontWeight: 700, fontFamily: 'var(--font-heading)',
@@ -87,7 +109,9 @@ export default function ActiveBets({ bets, onCashOut, onCashOutAll, devMode }) {
                       </span>
                     </div>
                     <div style={{ fontSize: 12, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)', marginTop: 2 }}>
-                      Amount ${formatPrice(bet.stake)} · {bet.pnlPct != null ? `${bet.pnlPct.toFixed(1)}% PnL` : ''}
+                      Amount ${formatPrice(bet.stake)} · {bet.optimistic
+                        ? (bet.optimisticConfirmed ? 'syncing position' : 'confirming on-chain')
+                        : (displayPnlPct != null ? `${displayPnlPct.toFixed(1)}% PnL` : '')}
                     </div>
                   </div>
                 </div>
@@ -96,7 +120,7 @@ export default function ActiveBets({ bets, onCashOut, onCashOutAll, devMode }) {
                   fontFamily: 'var(--font-mono)',
                   color: isPositive ? 'var(--green)' : 'var(--red)',
                 }}>
-                  {formatDollar(bet.pnl)}
+                  {formatDollar(displayPnl)}
                 </div>
               </div>
 
@@ -130,21 +154,29 @@ export default function ActiveBets({ bets, onCashOut, onCashOutAll, devMode }) {
                   : null;
                 const liq = bet.liqPrice && bet.liqPrice > 0 ? bet.liqPrice : fallbackLiq;
                 if (!liq || !bet.entryPrice) return null;
-                // Mirror liq distance around entry as a default upside bound when
-                // there's no on-chain TP (e.g. positions opened before TP support).
-                const isLong = bet.direction === 'up' || bet.direction === 'long';
-                const mirrorTp = isLong
-                  ? bet.entryPrice + (bet.entryPrice - liq)
-                  : bet.entryPrice - (liq - bet.entryPrice);
-                const tp = bet.tpPrice && bet.tpPrice > 0 ? bet.tpPrice : mirrorTp;
+                const hasTp = bet.tpPrice && bet.tpPrice > 0;
+                if (!hasTp) {
+                  return (
+                    <div style={{
+                      marginBottom: 16,
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      gap: 12,
+                      fontSize: 12,
+                      fontFamily: 'var(--font-mono)',
+                    }}>
+                      <span style={{ color: 'var(--red)' }}>Liq ${formatPrice(liq, priceDecimals)}</span>
+                      <span style={{ color: 'var(--text-muted)' }}>No TP</span>
+                    </div>
+                  );
+                }
                 return (
                   <div style={{ marginBottom: 16 }}>
                     <ProgressBar
                       liqPrice={liq}
-                      tpPrice={tp}
+                      tpPrice={bet.tpPrice}
                       markPrice={bet.markPrice || bet.currentPrice}
                       direction={bet.direction}
-                      tpIsImplicit={!bet.tpPrice || bet.tpPrice <= 0}
                       priceDecimals={priceDecimals}
                     />
                   </div>
@@ -155,6 +187,7 @@ export default function ActiveBets({ bets, onCashOut, onCashOutAll, devMode }) {
               <div style={{ display: 'flex', gap: 8 }}>
                 <button
                   onClick={() => onCashOut(bet)}
+                  disabled={cashOutDisabled}
                   style={{
                     flex: 2,
                     background: isPositive ? 'var(--green-dim)' : 'var(--red-dim)',
@@ -162,10 +195,11 @@ export default function ActiveBets({ bets, onCashOut, onCashOutAll, devMode }) {
                     borderRadius: 8,
                     padding: '10px 0',
                     color: isPositive ? 'var(--green)' : 'var(--red)',
-                    fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                    fontSize: 13, fontWeight: 600, cursor: cashOutDisabled ? 'wait' : 'pointer',
                     fontFamily: 'var(--font-heading)',
+                    opacity: cashOutDisabled ? 0.58 : 1,
                   }}
-                >Cash Out ({formatDollar(bet.pnl)})</button>
+                >{cashOutDisabled ? 'Confirming...' : `Cash Out (${formatDollar(displayPnl)})`}</button>
               </div>
             </div>
           </div>
