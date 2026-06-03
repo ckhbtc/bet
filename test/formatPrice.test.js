@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { formatPrice, priceDecimalsFromTickSize } from '../src/data/mockData.js';
+import { formatPrice, formatUsdcBalance, priceDecimalsFromTickSize } from '../src/data/mockData.js';
 
 test('formatPrice uses market-specific price decimals', () => {
   assert.equal(formatPrice(0.000012345, 9), '0.000012345');
@@ -14,3 +14,7 @@ test('priceDecimalsFromTickSize converts chain quote-scaled ticks to human decim
   assert.equal(priceDecimalsFromTickSize('1000000'), 0);
 });
 
+test('formatUsdcBalance truncates instead of rounding at two decimals', () => {
+  assert.equal(formatUsdcBalance(102.085158), '102.08');
+  assert.equal(formatUsdcBalance('1234.5678'), '1,234.56');
+});

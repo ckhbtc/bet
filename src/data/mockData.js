@@ -51,6 +51,23 @@ export function formatDollar(amount) {
   return `${sign}$${Math.abs(amount).toFixed(2)}`;
 }
 
+export function formatUsdcBalance(amount, decimals = 2) {
+  try {
+    const n = new Decimal(amount || 0);
+    if (!n.isFinite()) return '0.00';
+
+    return n
+      .toDecimalPlaces(decimals, Decimal.ROUND_DOWN)
+      .toNumber()
+      .toLocaleString('en-US', {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals,
+      });
+  } catch {
+    return '0.00';
+  }
+}
+
 // Cross-margin perpetual liquidation price.
 // long:  entry * (1 - 1/lev + MMR)
 // short: entry * (1 + 1/lev - MMR)
