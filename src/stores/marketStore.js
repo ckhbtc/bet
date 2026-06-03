@@ -6,6 +6,13 @@ import {
   fetchMarketsSummary,
   fetchVerifiedDerivativeMarkets,
 } from '../services/injective';
+import {
+  applyOptimisticCloses,
+  mergeFetchedAndOptimisticPositions,
+  pruneOptimisticCloses,
+  withOptimisticCloseExpiry,
+  withOptimisticExpiry,
+} from './optimisticPositions';
 
 // Priority display order. All other TrueCurrent-verified markets are appended
 // in BFF order, so new verified pairs are picked up without a deploy.
@@ -69,6 +76,33 @@ function selectFallbackMarkets(allMarkets) {
     .filter(Boolean);
 }
 
+function enrichPositionsWithMarketMetadata(positions, markets) {
+  if (!positions.length || !markets.length) return positions;
+
+  const marketsById = new Map(markets.map(m => [m.marketId.toLowerCase(), m]));
+
+  return positions.map(position => {
+    const market = marketsById.get(position.marketId.toLowerCase());
+    if (!market) return position;
+
+    const symbol = market.symbol || position.symbol || position.asset;
+
+    return {
+      ...position,
+      symbol,
+      asset: symbol,
+      ticker: market.ticker || position.ticker,
+      logo: market.logo || position.logo || '',
+      tokenName: market.tokenName || position.tokenName || '',
+      slug: market.slug || position.slug || '',
+      market: {
+        ...position.market,
+        ...market,
+      },
+    };
+  });
+}
+
 function hasSummaryPrice(summary) {
   return Number.isFinite(summary?.price) && summary.price > 0;
 }
@@ -95,6 +129,7 @@ const useMarketStore = create((set, get) => ({
   markets: [],
   prices: {},
   positions: [],
+  optimisticClosedPositions: {},
   loading: false,
   error: null,
   pollInterval: null,
@@ -134,7 +169,13 @@ const useMarketStore = create((set, get) => ({
         };
       });
 
-      set({ markets: uiMarkets, prices, loading: false, error: null });
+      set(state => ({
+        markets: uiMarkets,
+        prices,
+        positions: enrichPositionsWithMarketMetadata(state.positions, uiMarkets),
+        loading: false,
+        error: null,
+      }));
     } catch (err) {
       set({ loading: false, error: err.message });
       console.error('Failed to fetch markets:', err);
@@ -145,10 +186,72 @@ const useMarketStore = create((set, get) => ({
     if (!injAddress) return;
     try {
       const positions = await fetchPositions(injAddress);
-      set({ positions });
+      const enrichedPositions = enrichPositionsWithMarketMetadata(positions, get().markets);
+      set(state => ({
+        optimisticClosedPositions: pruneOptimisticCloses(state.optimisticClosedPositions),
+        positions: mergeFetchedAndOptimisticPositions(
+          applyOptimisticCloses(enrichedPositions, state.optimisticClosedPositions),
+          state.positions
+        ),
+      }));
     } catch (err) {
       console.error('Failed to fetch positions:', err);
     }
+  },
+
+  addOptimisticPosition: (position) => {
+    const optimisticPosition = withOptimisticExpiry(position);
+    set(state => ({
+      optimisticClosedPositions: Object.fromEntries(
+        Object.entries(state.optimisticClosedPositions).filter(([id]) => id !== optimisticPosition.id)
+      ),
+      positions: [
+        optimisticPosition,
+        ...state.positions.filter(existing => existing.id !== optimisticPosition.id),
+      ],
+    }));
+  },
+
+  updateOptimisticPosition: (id, patch) => {
+    set(state => ({
+      positions: state.positions.map(position =>
+        position.id === id
+          ? { ...position, ...patch }
+          : position
+      ),
+    }));
+  },
+
+  removeOptimisticPosition: (id) => {
+    set(state => ({
+      positions: state.positions.filter(position => !(position.id === id && position.optimistic)),
+    }));
+  },
+
+  addOptimisticClosedPosition: (position) => {
+    if (!position?.id) return;
+    set(state => ({
+      optimisticClosedPositions: {
+        ...state.optimisticClosedPositions,
+        [position.id]: withOptimisticCloseExpiry(position),
+      },
+      positions: state.positions.filter(existing => existing.id !== position.id),
+    }));
+  },
+
+  removeOptimisticClosedPosition: (id, restorePosition = null) => {
+    set(state => {
+      const nextClosed = Object.fromEntries(
+        Object.entries(state.optimisticClosedPositions).filter(([closedId]) => closedId !== id)
+      );
+      const shouldRestore = restorePosition
+        && !state.positions.some(position => position.id === restorePosition.id);
+
+      return {
+        optimisticClosedPositions: nextClosed,
+        positions: shouldRestore ? [restorePosition, ...state.positions] : state.positions,
+      };
+    });
   },
 
   updatePrices: async () => {
