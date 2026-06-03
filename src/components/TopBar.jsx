@@ -1,4 +1,5 @@
 import useWalletStore from '../stores/walletStore';
+import { formatUsdcBalance } from '../data/mockData';
 
 const THEME_SEGS = [
   { id: 'bauhaus',      glyph: '☀', label: 'Bauhaus light' },
@@ -117,23 +118,6 @@ export default function TopBar({
                 display: 'inline-flex', alignItems: 'center', gap: 4,
               }}
             >+ Add funds</button>
-            {sessionActive && (
-              <button
-                onClick={onRevokeAutosign}
-                disabled={revokingAutosign}
-                style={{
-                  background: 'var(--red-dim)',
-                  border: '1px solid var(--red)',
-                  borderRadius: 8,
-                  padding: '6px 12px',
-                  color: 'var(--red)',
-                  fontSize: 12, fontWeight: 600,
-                  fontFamily: 'var(--font-heading)',
-                  cursor: revokingAutosign ? 'wait' : 'pointer',
-                  opacity: revokingAutosign ? 0.65 : 1,
-                }}
-              >{revokingAutosign ? 'Revoking...' : 'Revoke autosign'}</button>
-            )}
             <div style={{
               background: 'var(--bg-card)',
               border: '1px solid var(--border)',
@@ -143,36 +127,40 @@ export default function TopBar({
             }}>
               <span style={{ fontSize: 11, color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>Balance</span>
               <span style={{ fontSize: 14, fontWeight: 600, color: 'var(--green)', fontFamily: 'var(--font-mono)' }}>
-                ${usdcBalance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                ${formatUsdcBalance(usdcBalance)}
               </span>
             </div>
             <div
               title={injAddress}
-              style={{
-                background: 'var(--blue-grad)',
-                borderRadius: 8,
-                display: 'flex', alignItems: 'center',
-                overflow: 'hidden',
-                fontSize: 12, fontWeight: 500, color: '#fff',
-                fontFamily: 'var(--font-mono)',
-              }}
+              className="wallet-menu"
             >
-              <span style={{ padding: '6px 10px 6px 12px' }}>
-                {ethAddress.slice(0, 6)}...{ethAddress.slice(-4)}
-              </span>
-              <button
-                onClick={disconnect}
-                title="Disconnect wallet"
-                aria-label="Disconnect wallet"
-                style={{
-                  background: 'rgba(0,0,0,0.2)',
-                  border: 'none', borderLeft: '1px solid rgba(255,255,255,0.18)',
-                  color: '#fff', cursor: 'pointer',
-                  padding: '6px 10px',
-                  fontSize: 14, lineHeight: 1,
-                  fontFamily: 'var(--font-mono)',
-                }}
-              >✕</button>
+              <button type="button" className="wallet-menu-trigger" aria-haspopup="menu">
+                <span>
+                  {ethAddress.slice(0, 6)}...{ethAddress.slice(-4)}
+                </span>
+                <span className="wallet-menu-arrow">▾</span>
+              </button>
+              <div className="wallet-menu-dropdown" role="menu">
+                {sessionActive && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    onClick={onRevokeAutosign}
+                    disabled={revokingAutosign}
+                    className="wallet-menu-item is-danger"
+                  >
+                    {revokingAutosign ? 'Revoking autosign...' : 'Revoke autosign'}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={disconnect}
+                  className="wallet-menu-item"
+                >
+                  Disconnect wallet
+                </button>
+              </div>
             </div>
           </>
         ) : (
