@@ -89,7 +89,7 @@ export default function BetResult({ bet, onPlaceAnother, onGoHome }) {
           {isWin && (
             <button
               onClick={() => {
-                const text = `I just won +$${bet.pnl.toFixed(2)} betting ${bet.asset} ${bet.direction === 'up' ? '📈' : '📉'} on INJ Bet!`;
+                const text = `I just won +$${bet.pnl.toFixed(2)} betting ${bet.asset} ${bet.direction === 'up' ? '📈' : '📉'} on YOLO!`;
                 if (navigator.share) {
                   navigator.share({ text }).catch(() => {});
                 } else {

@@ -1,8 +1,8 @@
-# INJ Bet
+# YOLO
 
 Perpetual-futures betting UI on [Injective](https://injective.com) — pick an
 asset, pick a stake and a target win, hit Place Bet. Live at
-**[bet.inj.so](https://bet.inj.so)**.
+**[yolo.inj.so](https://yolo.inj.so)**.
 
 Under the hood it's just perp trades, but framed as bets: enter your stake +
 desired win, the app computes the implied target price and opens a market

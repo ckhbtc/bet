@@ -36,7 +36,7 @@ export default function TopBar({
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer' }} onClick={() => onNavigate('home')}>
           <img
             src="/iso.png"
-            alt="INJ Bet"
+            alt="YOLO"
             width={28}
             height={28}
             style={{ width: 28, height: 28, display: 'block', borderRadius: '50%' }}
@@ -44,7 +44,7 @@ export default function TopBar({
           <span style={{
             fontSize: 16, fontWeight: 700, letterSpacing: -0.5,
             fontFamily: 'var(--font-heading)',
-          }}>INJ Bet</span>
+          }}>YOLO</span>
         </div>
 
         <nav style={{ display: 'flex', gap: 4 }}>

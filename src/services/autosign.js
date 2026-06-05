@@ -182,7 +182,7 @@ export async function grantAuthZ(injAddress, onProgress) {
   const { txHash, evmChainId } = await signAndBroadcastEip712({
     injAddress,
     msgs: msgGrants,
-    memo: 'Enable Bet autosign',
+    memo: 'Enable YOLO autosign',
     onProgress,
     failureLabel: 'AuthZ grant',
   });
@@ -212,7 +212,7 @@ export async function revokeAuthZ({ injAddress, granteeAddress, includeRfq = tru
   const { txHash, evmChainId } = await signAndBroadcastEip712({
     injAddress,
     msgs: msgRevokes,
-    memo: 'Revoke Bet autosign',
+    memo: 'Revoke YOLO autosign',
     onProgress,
     failureLabel: 'AuthZ revoke',
   });
