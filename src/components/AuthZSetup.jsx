@@ -1,98 +1,136 @@
-import { useState } from 'react';
 import useSessionStore from '../stores/sessionStore';
-import useWalletStore from '../stores/walletStore';
-import { formatUsdcBalance } from '../data/mockData';
-import BridgeModal from './BridgeModal';
 
-export default function AuthZSetup() {
-  const { granting, status, error, grant } = useSessionStore();
-  const { injAddress, ethAddress, usdcBalance } = useWalletStore();
-  const [showBridge, setShowBridge] = useState(false);
-
-  const handleGrant = () => grant({ injAddress, ethAddress }).catch(() => {});
+export default function AuthZSetup({ onAuthorize, onClose }) {
+  const { granting } = useSessionStore();
 
   return (
-    <div style={{
-      background: 'var(--bg-card)',
-      border: '1px solid var(--border)',
-      borderRadius: 16,
-      padding: 28,
-      maxWidth: 480,
-      width: '100%',
-      margin: '40px auto',
-      animation: 'slide-up 0.25s ease',
-    }}>
-      <div style={{ fontSize: 11, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: 3, marginBottom: 6 }}>
-        One-time setup
-      </div>
-      <div style={{ fontSize: 22, fontWeight: 700, marginBottom: 12, fontFamily: 'var(--font-heading)' }}>
-        Enable autosign
-      </div>
-      <div style={{ fontSize: 14, color: 'var(--text-secondary)', lineHeight: 1.5, marginBottom: 16 }}>
-        Sign once to authorize trading from this app – no wallet popup per bet.
-      </div>
-
-      <ul style={{
-        fontSize: 13, color: 'var(--text-secondary)', lineHeight: 1.7,
-        padding: 0, margin: '0 0 20px 0', listStyle: 'none',
-      }}>
-        <li>· Funds stay in your wallet</li>
-        <li>· Permission limited to derivative trading and settlement messages</li>
-        <li>· Revoke anytime</li>
-        <li>· Gas-free trading</li>
-        <li>· Authorized key stored only on this device</li>
-      </ul>
-
-      <button
-        onClick={handleGrant}
-        disabled={granting || !injAddress}
+    <div
+      role="presentation"
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        zIndex: 250,
+        background: 'var(--overlay)',
+        display: 'grid',
+        placeItems: 'center',
+        padding: 20,
+        animation: 'modal-fade-in 0.18s ease',
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="authorize-title"
+        onClick={(e) => e.stopPropagation()}
         style={{
+          background: 'var(--bg-card)',
+          border: '3px solid var(--border)',
+          borderRadius: 0,
+          padding: '32px 34px 34px',
+          maxWidth: 480,
           width: '100%',
-          background: granting ? 'var(--bg-primary)' : 'var(--accent-grad)',
-          color: granting ? 'var(--text-muted)' : 'var(--on-accent)',
-          border: granting ? '1px solid var(--border)' : 'none',
-          borderRadius: 10, padding: '14px 0',
-          fontSize: 15, fontWeight: 700, cursor: granting ? 'wait' : 'pointer',
-          fontFamily: 'var(--font-heading)', letterSpacing: 0.3,
+          boxShadow: '10px 10px 0 var(--border)',
+          animation: 'modal-pop-in 0.2s ease',
+          position: 'relative',
         }}
       >
-        {granting ? 'Signing...' : 'Authorize & Continue'}
-      </button>
-
-      {status && (
-        <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 12, textAlign: 'center' }}>
-          {status}
-        </div>
-      )}
-      {error && (
-        <div style={{
-          fontSize: 12, color: 'var(--red)', background: 'var(--red-dim)',
-          border: '1px solid var(--red)', borderRadius: 8,
-          padding: '8px 12px', marginTop: 12, textAlign: 'center',
-        }}>
-          {error}
-        </div>
-      )}
-
-      <div style={{
-        marginTop: 16, paddingTop: 14, borderTop: '1px solid var(--border)',
-        fontSize: 12, color: 'var(--text-muted)', textAlign: 'center', lineHeight: 1.5,
-      }}>
-        {usdcBalance > 0
-          ? <>You have <span style={{ color: 'var(--green)', fontFamily: 'var(--font-mono)' }}>${formatUsdcBalance(usdcBalance)}</span> USDC ready to bet.</>
-          : 'No funds yet?'}{' '}
         <button
-          onClick={() => setShowBridge(true)}
+          type="button"
+          onClick={onClose}
+          aria-label="Dismiss authorization"
           style={{
-            background: 'transparent', border: 'none',
-            color: 'var(--accent)', cursor: 'pointer', padding: 0,
-            fontSize: 12, fontWeight: 600, fontFamily: 'var(--font-heading)',
-            textDecoration: 'underline',
+            position: 'absolute',
+            top: 14,
+            right: 16,
+            background: 'transparent',
+            border: 'none',
+            color: 'var(--text-muted)',
+            cursor: 'pointer',
+            fontSize: 30,
+            lineHeight: 1,
+            fontFamily: 'var(--font-heading)',
           }}
-        >Bridge USDC →</button>
-      </div>
+        >
+          x
+        </button>
 
-      {showBridge && <BridgeModal onClose={() => setShowBridge(false)} />}
+        <div style={{
+          fontSize: 12,
+          color: 'var(--text-muted)',
+          textTransform: 'uppercase',
+          letterSpacing: 5,
+          marginBottom: 10,
+          fontFamily: 'var(--font-mono)',
+        }}>
+          One-time setup
+        </div>
+
+        <div
+          id="authorize-title"
+          style={{
+            fontSize: 30,
+            fontWeight: 700,
+            marginBottom: 12,
+            fontFamily: 'var(--font-heading)',
+            lineHeight: 1.05,
+          }}
+        >
+          Authorize Wallet
+        </div>
+
+        <div style={{
+          fontSize: 16,
+          color: 'var(--text-secondary)',
+          lineHeight: 1.45,
+          marginBottom: 20,
+        }}>
+          Sign once to place bets without a wallet popup every time.
+        </div>
+
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: 10,
+          marginBottom: 24,
+        }}>
+          {['Funds stay put', 'Revoke anytime'].map((label) => (
+            <div
+              key={label}
+              style={{
+                border: '2px solid var(--border)',
+                padding: '10px 12px',
+                fontSize: 13,
+                color: 'var(--text-secondary)',
+                fontFamily: 'var(--font-heading)',
+                textAlign: 'center',
+              }}
+            >
+              {label}
+            </div>
+          ))}
+        </div>
+
+        <button
+          type="button"
+          onClick={onAuthorize}
+          disabled={granting}
+          style={{
+            width: '100%',
+            background: granting ? 'var(--bg-primary)' : 'var(--accent-grad)',
+            color: granting ? 'var(--text-muted)' : 'var(--on-accent)',
+            border: granting ? '2px solid var(--border)' : '2px solid var(--accent)',
+            borderRadius: 0,
+            padding: '17px 0',
+            fontSize: 17,
+            fontWeight: 700,
+            cursor: granting ? 'wait' : 'pointer',
+            fontFamily: 'var(--font-heading)',
+          }}
+        >
+          {granting ? 'Authorizing...' : 'Authorize Wallet'}
+        </button>
+      </div>
     </div>
   );
 }

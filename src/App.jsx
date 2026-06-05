@@ -81,6 +81,8 @@ export default function App() {
   const [txStatus, setTxStatus] = useState(null); // { type: 'loading'|'success'|'warning'|'error', message, txHash? }
   const [confetti, setConfetti] = useState(false);
   const [showBridge, setShowBridge] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authDismissedFor, setAuthDismissedFor] = useState(null);
   const [theme, setTheme] = useState(readInitialTheme);
   const [devMode, setDevMode] = useState(() => {
     if (typeof localStorage === 'undefined') return false;
@@ -121,13 +123,49 @@ export default function App() {
     return () => { window.removeEventListener('keydown', onKey); clearTimeout(timer); };
   }, []);
 
-  const { connected, injAddress, usdcBalance, refreshBalances } = useWalletStore();
+  const { connected, injAddress, ethAddress, usdcBalance, refreshBalances } = useWalletStore();
   const { markets, positions, loading, startPolling, stopPolling } = useMarketStore();
   const session = useSessionStore();
 
   const clearTxStatusSoon = useCallback(() => {
     setTimeout(() => setTxStatus(null), 5000);
   }, []);
+
+  const needsAuthorization = connected && injAddress && !session.rfqReady;
+
+  const dismissAuthModal = useCallback(() => {
+    setShowAuthModal(false);
+    if (injAddress) setAuthDismissedFor(injAddress);
+  }, [injAddress]);
+
+  const handleAuthorizeWallet = useCallback(() => {
+    if (!connected || !injAddress || session.granting) return;
+
+    setShowAuthModal(false);
+    setAuthDismissedFor(injAddress);
+    setTxStatus({ type: 'loading', message: 'Confirm authorization in wallet' });
+
+    session.grant({ injAddress, ethAddress })
+      .then(() => {
+        setTxStatus({ type: 'success', message: 'Wallet authorized.' });
+        clearTxStatusSoon();
+      })
+      .catch((err) => {
+        setTxStatus({ type: 'error', message: err.message });
+        clearTxStatusSoon();
+      });
+  }, [connected, injAddress, ethAddress, session, clearTxStatusSoon]);
+
+  useEffect(() => {
+    if (!connected || !injAddress || !needsAuthorization) {
+      setShowAuthModal(false);
+      if (!connected) setAuthDismissedFor(null);
+      return;
+    }
+
+    if (view !== 'home' || selectedMarket || authDismissedFor === injAddress) return;
+    setShowAuthModal(true);
+  }, [connected, injAddress, needsAuthorization, view, selectedMarket, authDismissedFor]);
 
   // Re-validate the session token against the currently-connected wallet.
   // Prevents a stale sessionToken (bound to a prior granter) from being
@@ -441,12 +479,6 @@ export default function App() {
       }}>
         {/* Main content */}
         <div style={{ flex: 1, minWidth: 0 }}>
-          {connected && !session.active && !selectedMarket && (
-            <div style={{ marginBottom: 24 }}>
-              <AuthZSetup />
-            </div>
-          )}
-
           {view === 'home' && !selectedMarket && (
             <>
               <div style={{ marginBottom: 24 }}>
@@ -500,14 +532,14 @@ export default function App() {
                     }}
                   >Connect Wallet</button>
                 </div>
-              ) : !session.active ? (
-                <AuthZSetup />
               ) : (
                 <BetPanel
                   market={selectedMarket}
                   balance={usdcBalance}
                   requestAddress={injAddress}
                   rfqReady={session.rfqReady}
+                  authorizing={session.granting}
+                  onAuthorize={handleAuthorizeWallet}
                   onConfirm={handleBetConfirm}
                   onClose={() => setSelectedMarket(null)}
                 />
@@ -556,6 +588,13 @@ export default function App() {
       )}
 
       {showBridge && <BridgeModal onClose={() => setShowBridge(false)} />}
+
+      {showAuthModal && (
+        <AuthZSetup
+          onAuthorize={handleAuthorizeWallet}
+          onClose={dismissAuthModal}
+        />
+      )}
     </>
   );
 }

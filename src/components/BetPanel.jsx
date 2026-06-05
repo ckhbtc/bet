@@ -16,6 +16,8 @@ export default function BetPanel({
   balance,
   requestAddress,
   rfqReady = true,
+  authorizing = false,
+  onAuthorize,
   onConfirm,
   onClose,
 }) {
@@ -98,9 +100,33 @@ export default function BetPanel({
   const unreachable = hasTakeProfit && direction === 'down' ? requiredMove >= 1 : false;
 
   const targetValid = !hasTakeProfit || (winTargetNum >= 1 && !isNaN(targetPrice) && targetPrice > 0);
-  const canPlaceBet = stakeNum >= 1 && stakeNum <= balance
+  const inputsReady = stakeNum >= 1 && stakeNum <= balance
     && targetValid && !unreachable
-    && selectedLeverageAllowed && rfqReady;
+    && selectedLeverageAllowed;
+  const needsAuthorization = !rfqReady;
+  const canPlaceBet = inputsReady && rfqReady;
+  const ctaEnabled = needsAuthorization ? Boolean(onAuthorize) && !authorizing : canPlaceBet;
+
+  const handleCtaClick = () => {
+    if (needsAuthorization) {
+      if (!authorizing) onAuthorize?.();
+      return;
+    }
+    if (!canPlaceBet) return;
+    onConfirm({
+      market,
+      direction,
+      stake: stakeNum,
+      winTarget: winTargetNum,
+      aggr,
+      aggrLabel: aggrConfig.label,
+      aggrColor: aggrConfig.color,
+      leverage: aggrConfig.leverage,
+      targetMode,
+      targetPrice: hasTakeProfit ? targetPrice : null,
+      liqPrice,
+    });
+  };
 
   useEffect(() => {
     if (!requestAddress || !rfqReady || !selectedLeverageAllowed || stakeNum < 1) return;
@@ -437,7 +463,7 @@ export default function BetPanel({
           borderRadius: 8, padding: '8px 12px', marginBottom: 12,
           fontSize: 12, color: 'var(--accent)', textAlign: 'center', lineHeight: 1.5,
         }}>
-          Trading needs updated autosign permissions. Revoke autosign, then authorize again.
+          Authorize your wallet before placing this bet.
         </div>
       )}
 
@@ -470,34 +496,24 @@ export default function BetPanel({
 
       {/* CTA */}
       <button
-        onClick={() => canPlaceBet && onConfirm({
-          market,
-          direction,
-          stake: stakeNum,
-          winTarget: winTargetNum,
-          aggr,
-          aggrLabel: aggrConfig.label,
-          aggrColor: aggrConfig.color,
-          leverage: aggrConfig.leverage,
-          targetMode,
-          targetPrice: hasTakeProfit ? targetPrice : null,
-          liqPrice,
-        })}
-        disabled={!canPlaceBet}
+        onClick={handleCtaClick}
+        disabled={!ctaEnabled}
         style={{
           width: '100%',
-          background: canPlaceBet ? 'var(--accent-grad)' : 'var(--bg-primary)',
-          color: canPlaceBet ? 'var(--on-accent)' : 'var(--text-muted)',
-          border: canPlaceBet ? 'none' : '1px solid var(--border)',
+          background: ctaEnabled ? 'var(--accent-grad)' : 'var(--bg-primary)',
+          color: ctaEnabled ? 'var(--on-accent)' : 'var(--text-muted)',
+          border: ctaEnabled ? 'none' : '1px solid var(--border)',
           borderRadius: 10, padding: '16px 0',
           fontSize: 16, fontWeight: 700,
-          cursor: canPlaceBet ? 'pointer' : 'not-allowed',
+          cursor: ctaEnabled ? 'pointer' : 'not-allowed',
           fontFamily: 'var(--font-heading)',
           letterSpacing: 0.5,
-          opacity: canPlaceBet ? 1 : 0.5,
+          opacity: ctaEnabled ? 1 : 0.5,
         }}
       >
-        {hasTakeProfit ? 'Place Bet →' : 'YOLO →'}
+        {needsAuthorization
+          ? (authorizing ? 'Authorizing...' : 'Authorize Wallet')
+          : (hasTakeProfit ? 'Place Bet →' : 'YOLO →')}
       </button>
     </div>
   );
