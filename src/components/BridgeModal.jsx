@@ -527,7 +527,7 @@ export default function BridgeModal({ onClose }) {
             fontSize: 11, color: 'var(--text-muted)', textAlign: 'center',
             marginTop: 12, lineHeight: 1.5,
           }}>
-            Circle CCTP V2 — burn USDC on the source chain, mint native USDC on
+            Circle CCTP V2 — burn USDC on the source chain, mint native USDC on{' '}
             {injectiveNetworkLabel}. Mint gas is on us; you'll only need gas for the burn on
             the source chain.
           </div>
