@@ -5,7 +5,15 @@ import { formatPrice } from '../data/mockData';
  * Fill grows from the center toward whichever edge the current mark is closer to,
  * so the user sees at a glance which side is winning.
  */
-export default function ProgressBar({ liqPrice, tpPrice, markPrice, direction, priceDecimals = null }) {
+export default function ProgressBar({
+  liqPrice,
+  tpPrice,
+  markPrice,
+  direction,
+  priceDecimals = null,
+  liquidationColor = 'var(--red)',
+  liquidationDim = 'var(--red-dim)',
+}) {
   if (liqPrice == null || tpPrice == null || markPrice == null) return null;
 
   const isLong = direction === 'up' || direction === 'long';
@@ -29,10 +37,10 @@ export default function ProgressBar({ liqPrice, tpPrice, markPrice, direction, p
         fontSize: 10, fontFamily: 'var(--font-mono)',
         color: 'var(--text-muted)', marginBottom: 6,
       }}>
-        <span style={{ color: liqOnLeft ? 'var(--red)' : 'var(--green)' }}>
+        <span style={{ color: liqOnLeft ? liquidationColor : 'var(--green)' }}>
           {liqOnLeft ? 'Liq' : 'TP'} ${formatPrice(low, priceDecimals)}
         </span>
-        <span style={{ color: liqOnLeft ? 'var(--green)' : 'var(--red)' }}>
+        <span style={{ color: liqOnLeft ? 'var(--green)' : liquidationColor }}>
           {liqOnLeft ? 'TP' : 'Liq'} ${formatPrice(high, priceDecimals)}
         </span>
       </div>
@@ -41,8 +49,8 @@ export default function ProgressBar({ liqPrice, tpPrice, markPrice, direction, p
         position: 'relative', height: 8,
         borderRadius: 4, overflow: 'hidden',
         background: liqOnLeft
-          ? 'linear-gradient(to right, var(--red-dim), var(--bg-primary) 50%, var(--green-dim))'
-          : 'linear-gradient(to right, var(--green-dim), var(--bg-primary) 50%, var(--red-dim))',
+          ? `linear-gradient(to right, ${liquidationDim}, var(--bg-primary) 50%, var(--green-dim))`
+          : `linear-gradient(to right, var(--green-dim), var(--bg-primary) 50%, ${liquidationDim})`,
       }}>
         <div style={{
           position: 'absolute',

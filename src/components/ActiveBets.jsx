@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
-import { formatDollar, formatPrice, liquidationPrice } from '../data/mockData';
+import { formatDollar, formatPrice } from '../data/mockData';
+import { derivePositionLiqPrice, isDangerouslyCloseToLiquidation } from '../services/liquidationRisk';
 import ProgressBar from './ProgressBar';
 import CoinLogo from './CoinLogo';
 
 const STATUS_CONFIG = {
   winning: { label: 'WINNING', bg: 'var(--green-dim)', border: 'var(--green)', color: 'var(--green)' },
-  at_risk: { label: 'AT RISK', bg: 'var(--red-dim)', border: 'var(--red)', color: 'var(--red)' },
+  at_risk: { label: 'AT RISK', bg: 'var(--orange-dim)', border: 'var(--orange)', color: 'var(--orange)' },
+  danger:  { label: 'DANGER',  bg: 'var(--red-dim)', border: 'var(--red)', color: 'var(--red)' },
   close:   { label: 'CLOSE',   bg: 'var(--accent-dim)', border: 'var(--accent)', color: 'var(--accent)' },
   opening: { label: 'MATCHED', bg: 'var(--accent-dim)', border: 'var(--accent)', color: 'var(--accent)' },
 };
@@ -50,15 +52,27 @@ export default function ActiveBets({ bets, onCashOut, onCashOutAll, devMode }) {
       )}
       {bets.map(bet => {
         const inOpenPnlGrace = Number(bet.pnlGraceExpiresAt || 0) > now;
-        const status = inOpenPnlGrace
-          ? STATUS_CONFIG.winning
-          : (STATUS_CONFIG[bet.status] || STATUS_CONFIG.close);
-        const statusLabel = bet.optimistic
-          ? (bet.optimisticConfirmed ? 'CONFIRMED' : 'MATCHED')
-          : status.label;
         const displayPnl = inOpenPnlGrace ? 0 : bet.pnl;
         const displayPnlPct = inOpenPnlGrace ? 0 : bet.pnlPct;
         const isPositive = inOpenPnlGrace || displayPnl >= 0;
+        const dangerClose = !isPositive && isDangerouslyCloseToLiquidation(bet);
+        const status = bet.optimistic
+          ? STATUS_CONFIG.opening
+          : isPositive
+            ? STATUS_CONFIG.winning
+            : dangerClose
+              ? STATUS_CONFIG.danger
+              : STATUS_CONFIG.at_risk;
+        const statusLabel = bet.optimistic
+          ? (bet.optimisticConfirmed ? 'CONFIRMED' : 'MATCHED')
+          : status.label;
+        const lossColor = dangerClose ? 'var(--red)' : 'var(--orange)';
+        const lossBg = dangerClose ? 'var(--red-dim)' : 'var(--orange-dim)';
+        const pnlColor = isPositive ? 'var(--green)' : lossColor;
+        const cashOutBg = isPositive ? 'var(--green-dim)' : lossBg;
+        const liquidationColor = dangerClose ? 'var(--red)' : 'var(--orange)';
+        const liquidationDim = dangerClose ? 'var(--red-dim)' : 'var(--orange-dim)';
+        const liq = derivePositionLiqPrice(bet);
         const priceDecimals = bet.market?.priceDecimals;
         const cashOutDisabled = Boolean(bet.optimistic);
 
@@ -118,7 +132,7 @@ export default function ActiveBets({ bets, onCashOut, onCashOutAll, devMode }) {
                 <div style={{
                   fontSize: 24, fontWeight: 700,
                   fontFamily: 'var(--font-mono)',
-                  color: isPositive ? 'var(--green)' : 'var(--red)',
+                  color: pnlColor,
                 }}>
                   {formatDollar(displayPnl)}
                 </div>
@@ -135,24 +149,12 @@ export default function ActiveBets({ bets, onCashOut, onCashOutAll, devMode }) {
                 </div>
                 <div>
                   <span style={{ color: 'var(--text-muted)' }}>Current </span>
-                  <span style={{ color: isPositive ? 'var(--green)' : 'var(--red)' }}>${formatPrice(bet.markPrice || bet.currentPrice, priceDecimals)}</span>
+                  <span style={{ color: pnlColor }}>${formatPrice(bet.markPrice || bet.currentPrice, priceDecimals)}</span>
                 </div>
               </div>
 
               {/* Liq ←→ TP progress */}
               {(() => {
-                const lev = (bet.entryPrice && bet.margin && Number(bet.quantity))
-                  ? (bet.entryPrice * Number(bet.quantity)) / bet.margin
-                  : null;
-                const fallbackLiq = (lev && bet.entryPrice)
-                  ? liquidationPrice({
-                      entryPrice: bet.entryPrice,
-                      leverage: lev,
-                      direction: bet.direction,
-                      mmr: Number(bet.market?.maintenanceMarginRatio) || 0.025,
-                    })
-                  : null;
-                const liq = bet.liqPrice && bet.liqPrice > 0 ? bet.liqPrice : fallbackLiq;
                 if (!liq || !bet.entryPrice) return null;
                 const hasTp = bet.tpPrice && bet.tpPrice > 0;
                 if (!hasTp) {
@@ -165,7 +167,7 @@ export default function ActiveBets({ bets, onCashOut, onCashOutAll, devMode }) {
                       fontSize: 12,
                       fontFamily: 'var(--font-mono)',
                     }}>
-                      <span style={{ color: 'var(--red)' }}>Liq ${formatPrice(liq, priceDecimals)}</span>
+                      <span style={{ color: liquidationColor }}>Liq ${formatPrice(liq, priceDecimals)}</span>
                       <span style={{ color: 'var(--text-muted)' }}>No TP</span>
                     </div>
                   );
@@ -178,6 +180,8 @@ export default function ActiveBets({ bets, onCashOut, onCashOutAll, devMode }) {
                       markPrice={bet.markPrice || bet.currentPrice}
                       direction={bet.direction}
                       priceDecimals={priceDecimals}
+                      liquidationColor={liquidationColor}
+                      liquidationDim={liquidationDim}
                     />
                   </div>
                 );
@@ -190,11 +194,11 @@ export default function ActiveBets({ bets, onCashOut, onCashOutAll, devMode }) {
                   disabled={cashOutDisabled}
                   style={{
                     flex: 2,
-                    background: isPositive ? 'var(--green-dim)' : 'var(--red-dim)',
-                    border: `1px solid ${isPositive ? 'var(--green)' : 'var(--red)'}`,
+                    background: cashOutBg,
+                    border: `1px solid ${pnlColor}`,
                     borderRadius: 8,
                     padding: '10px 0',
-                    color: isPositive ? 'var(--green)' : 'var(--red)',
+                    color: pnlColor,
                     fontSize: 13, fontWeight: 600, cursor: cashOutDisabled ? 'wait' : 'pointer',
                     fontFamily: 'var(--font-heading)',
                     opacity: cashOutDisabled ? 0.58 : 1,

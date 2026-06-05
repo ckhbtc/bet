@@ -31,6 +31,8 @@
   --on-accent:     #faf6e8;
   --green:         #2e6e3a;
   --green-dim:     rgba(46, 110, 58, 0.18);
+  --orange:        #d97706;
+  --orange-dim:    rgba(217, 119, 6, 0.18);
   --red:           #c43030;
   --red-dim:       rgba(196, 48, 48, 0.18);
   --blue:          #1d3a6c;
@@ -62,6 +64,8 @@
   --on-accent:     #14110b;
   --green:         #6ec46e;
   --green-dim:     rgba(110, 196, 110, 0.20);
+  --orange:        #f59e0b;
+  --orange-dim:    rgba(245, 158, 11, 0.22);
   --red:           #ef5a45;
   --red-dim:       rgba(239, 90, 69, 0.22);
   --blue:          #6e9ad8;
