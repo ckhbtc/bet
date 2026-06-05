@@ -44,7 +44,11 @@ import {
   cancelActiveConditionalOrdersForMarket,
   submitTakeProfitIntent,
 } from './rfqConditional.js';
-import { assertOpenMarginAllowed } from './leverageLimits.js';
+import {
+  DEFAULT_INITIAL_MARGIN_RATIO,
+  assertOpenMarginAllowed,
+  initialMarginCheckPrice,
+} from './leverageLimits.js';
 
 const GRPC_HEADER_SIZE = 5;
 const GRPC_COMPRESSION_NONE = 0;
@@ -1591,19 +1595,30 @@ export function buildRfqOrderInput({ market, oraclePrice, side, stakeUsdt, lever
   const lev = new Decimal(leverage);
   const price = new Decimal(oraclePrice);
 
-  const quantity = quantizeDecimal(
-    stake.mul(lev).div(price),
-    market.minQuantityTickSize,
-    Decimal.ROUND_FLOOR
-  );
-  if (new Decimal(quantity).lte(0)) throw new Error('Quantity rounds to zero - try a larger size');
-
   const worstRaw = price.mul(isLong ? new Decimal(1).plus(slippage) : new Decimal(1).minus(slippage));
   const worstPrice = quantizeDecimal(
     worstRaw,
     humanPriceTick(market.minPriceTickSize),
     isLong ? Decimal.ROUND_CEIL : Decimal.ROUND_FLOOR
   );
+  const requestedQuantity = stake.mul(lev).div(price);
+  const marginCheckPrice = initialMarginCheckPrice({
+    oraclePrice: price,
+    worstPrice,
+    side,
+    slippage,
+  });
+  const imr = new Decimal(market?.initialMarginRatio ?? DEFAULT_INITIAL_MARGIN_RATIO);
+  const maxQuantityByMargin = imr.isFinite() && imr.gt(0)
+    ? stake.div(marginCheckPrice.mul(imr))
+    : requestedQuantity;
+  const quantity = quantizeDecimal(
+    Decimal.min(requestedQuantity, maxQuantityByMargin),
+    market.minQuantityTickSize,
+    Decimal.ROUND_FLOOR
+  );
+  if (new Decimal(quantity).lte(0)) throw new Error('Quantity rounds to zero - try a larger size');
+
   assertOpenMarginAllowed({
     market,
     stake,
@@ -1683,11 +1698,26 @@ export async function tradeOpenRfq({
       timing,
     });
     const input = buildRfqOrderInput({ market, oraclePrice, side, stakeUsdt, leverage, slippage });
+    const marginCheckPrice = initialMarginCheckPrice({
+      oraclePrice,
+      worstPrice: input.worstPrice,
+      side,
+      slippage,
+    });
+    const marginCheckNotional = new Decimal(input.quantity).mul(marginCheckPrice);
+    const imr = new Decimal(market?.initialMarginRatio ?? DEFAULT_INITIAL_MARGIN_RATIO);
     markRfqTiming(timing, 'input.ready', {
       direction: input.direction,
       quantity: input.quantity,
       margin: input.margin,
       worstPrice: input.worstPrice,
+      requestedLeverage: String(leverage),
+      initialMarginRatio: market.initialMarginRatio ?? null,
+      initialMarginCheckPrice: canonicalDecimal(marginCheckPrice),
+      initialMarginCheckNotional: canonicalDecimal(marginCheckNotional),
+      requiredInitialMargin: imr.isFinite() && imr.gt(0)
+        ? canonicalDecimal(marginCheckNotional.mul(imr))
+        : null,
     });
 
     const openResult = await executeRfqGatewayAutoSign({

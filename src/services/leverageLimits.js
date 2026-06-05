@@ -120,20 +120,32 @@ export function isOpenLeverageAllowed({
   }
 }
 
+export function initialMarginCheckPrice({
+  oraclePrice,
+  worstPrice,
+  side,
+  slippage = RFQ_OPEN_SLIPPAGE,
+}) {
+  const worst = positiveDecimal(worstPrice, '0');
+  if (side !== 'short') return worst;
+
+  const oracle = positiveDecimal(oraclePrice, worst);
+  const slip = nonNegativeDecimal(slippage);
+  return Decimal.max(worst, oracle.mul(slip.plus(1)));
+}
+
 export function requiredOpenMargin({
   quantity,
   oraclePrice,
   worstPrice,
   initialMarginRatio,
   side,
+  slippage = RFQ_OPEN_SLIPPAGE,
 }) {
   const qty = positiveDecimal(quantity, '0');
-  const oracle = positiveDecimal(oraclePrice, '0');
-  const worst = positiveDecimal(worstPrice, '0');
+  const marginPrice = initialMarginCheckPrice({ oraclePrice, worstPrice, side, slippage });
   const imr = positiveDecimal(initialMarginRatio, DEFAULT_INITIAL_MARGIN_RATIO);
-  const adverseMove = side === 'short' ? oracle.minus(worst) : worst.minus(oracle);
-  const priceGap = Decimal.max(adverseMove, 0);
-  return qty.mul(worst.mul(imr).plus(priceGap));
+  return qty.mul(marginPrice).mul(imr);
 }
 
 export function assertOpenMarginAllowed({
@@ -166,7 +178,6 @@ export function assertOpenMarginAllowed({
   }
 
   if (margin.gte(requiredMargin)) return;
-  if (maxLeverage.isFinite() && notionalLeverage.lte(maxLeverage)) return;
 
   throw new Error(
     `Selected aggressiveness is too high for ${label}. Choose a lower aggressiveness.`

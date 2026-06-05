@@ -32,6 +32,7 @@ import {
   leveragePresetRowForMax,
   marketMaxLeverage,
   maxOpenLeverage,
+  requiredOpenMargin,
   steppedMaxOpenLeverage,
   steppedMarketMaxLeverage,
 } from '../src/services/leverageLimits.js';
@@ -217,6 +218,74 @@ test('buildRfqOrderInput allows leverage within the market margin cap', () => {
     quantity: '5',
     worstPrice: '101',
   });
+});
+
+test('buildRfqOrderInput caps max-leverage quantity against worst price initial margin', () => {
+  const ethLikeMarket = {
+    ...market,
+    symbol: 'ETH',
+    initialMarginRatio: '0.02',
+    minPriceTickSize: '10000',
+    minQuantityTickSize: '0.0001',
+  };
+
+  const input = buildRfqOrderInput({
+    market: ethLikeMarket,
+    oraclePrice: '1584.8',
+    side: 'long',
+    stakeUsdt: '10',
+    leverage: '50',
+    slippage: 0.01,
+  });
+
+  assert.equal(input.direction, 'long');
+  assert.equal(input.margin, '10');
+  assert.equal(input.worstPrice, '1600.65');
+  assert.equal(input.quantity, '0.3123');
+  assert.ok(
+    requiredOpenMargin({
+      quantity: input.quantity,
+      oraclePrice: '1584.8',
+      worstPrice: input.worstPrice,
+      initialMarginRatio: ethLikeMarket.initialMarginRatio,
+      side: 'long',
+      slippage: 0.01,
+    }).lte(10)
+  );
+});
+
+test('buildRfqOrderInput caps short max-leverage quantity above oracle for margin safety', () => {
+  const ethLikeMarket = {
+    ...market,
+    symbol: 'ETH',
+    initialMarginRatio: '0.02',
+    minPriceTickSize: '10000',
+    minQuantityTickSize: '0.0001',
+  };
+
+  const input = buildRfqOrderInput({
+    market: ethLikeMarket,
+    oraclePrice: '100',
+    side: 'short',
+    stakeUsdt: '10',
+    leverage: '50',
+    slippage: 0.01,
+  });
+
+  assert.equal(input.direction, 'short');
+  assert.equal(input.margin, '10');
+  assert.equal(input.worstPrice, '99');
+  assert.equal(input.quantity, '4.9504');
+  assert.ok(
+    requiredOpenMargin({
+      quantity: input.quantity,
+      oraclePrice: '100',
+      worstPrice: input.worstPrice,
+      initialMarginRatio: ethLikeMarket.initialMarginRatio,
+      side: 'short',
+      slippage: 0.01,
+    }).lte(10)
+  );
 });
 
 test('buildRfqCloseInput closes longs with a zero-margin short RFQ', () => {
