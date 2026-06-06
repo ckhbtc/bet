@@ -382,6 +382,43 @@ test('normalizeRfqQuoteForContract emits the accept_quote quote shape', () => {
   });
 });
 
+test('selectRfqQuotesForAccept supports maker filters and minimum TTL', () => {
+  const nowMs = Date.now();
+  const selected = selectRfqQuotesForAccept([
+    quote({ maker: 'inj1bad', price: '101', expiry: { timestamp: nowMs + 5_000, height: 0 } }),
+    quote({ maker: 'inj1short', price: '99', expiry: { timestamp: nowMs + 50, height: 0 } }),
+    quote({ maker: 'inj1good', price: '100', expiry: { timestamp: nowMs + 5_000, height: 0 } }),
+  ], {
+    rfqId: 12,
+    marketId: market.marketId,
+    direction: 'long',
+    worstPrice: '101',
+    onlyMakers: ['inj1good', 'inj1short'],
+    excludeMakers: ['inj1bad'],
+    minTtlMs: 250,
+  });
+
+  assert.deepEqual(selected.map(q => q.maker), ['inj1good']);
+
+  const result = buildRfqQuoteResult({
+    clientId: 'client-1',
+    ack: { rfqId: 12, status: 'ok' },
+    quotes: [
+      quote({ maker: 'inj1bad', expiry: { timestamp: nowMs + 5_000, height: 0 } }),
+      quote({ maker: 'inj1short', expiry: { timestamp: nowMs + 50, height: 0 } }),
+      quote({ maker: 'inj1good', expiry: { timestamp: nowMs + 5_000, height: 0 } }),
+    ],
+    marketId: market.marketId,
+    direction: 'long',
+    worstPrice: '101',
+    onlyMakers: ['inj1good', 'inj1short'],
+    excludeMakers: ['inj1bad'],
+    minTtlMs: 250,
+  });
+  assert.equal(result.quoteDiagnostics.find(q => q.maker === 'inj1bad').rejectionReason, 'maker inj1bad not in allowlist');
+  assert.match(result.quoteDiagnostics.find(q => q.maker === 'inj1short').rejectionReason, /expiry/);
+});
+
 test('getPreparedQuoteExpiryReport flags prepared RFQ quotes that are already expired', () => {
   const nowMs = 1_770_000_000_000;
   const prepared = {

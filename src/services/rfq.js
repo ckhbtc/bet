@@ -670,10 +670,22 @@ function isQuoteWithinWorstPrice(quote, direction, worstPrice) {
   return direction === 'long' ? quotePrice.lte(worst) : quotePrice.gte(worst);
 }
 
-export function getRfqQuoteRejectReason(quote, { rfqId, marketId, direction, worstPrice }) {
+function makerFilterSet(values) {
+  if (!values) return null;
+  const raw = Array.isArray(values) ? values : String(values).split(',');
+  const makers = raw.map(value => String(value || '').trim()).filter(Boolean);
+  return makers.length ? new Set(makers) : null;
+}
+
+export function getRfqQuoteRejectReason(quote, request) {
+  const { rfqId, marketId, direction, worstPrice } = request;
   if (!quote) return 'quote missing';
   if (!quote.signature) return 'signature missing';
   if (!quote.maker) return 'maker missing';
+  const onlyMakers = makerFilterSet(request.onlyMakers);
+  const excludeMakers = makerFilterSet(request.excludeMakers);
+  if (onlyMakers && !onlyMakers.has(quote.maker)) return `maker ${quote.maker} not in allowlist`;
+  if (excludeMakers?.has(quote.maker)) return `maker ${quote.maker} excluded`;
   if (quote.chainId !== RFQ_CHAIN_ID) return `chain ${quote.chainId || '<empty>'} != ${RFQ_CHAIN_ID}`;
   if (quote.contractAddress !== RFQ_CONTRACT_ADDRESS) {
     return `contract ${quote.contractAddress || '<empty>'} != ${RFQ_CONTRACT_ADDRESS}`;
@@ -687,16 +699,17 @@ export function getRfqQuoteRejectReason(quote, { rfqId, marketId, direction, wor
     return `price ${quote.price} outside worst ${worstPrice} for ${direction}`;
   }
 
-  const expiresAtMs = Number(quote.expiry?.timestamp || 0);
-  if (expiresAtMs > 0 && expiresAtMs <= Date.now() + 250) {
+  const minTtlMs = Number.isFinite(Number(request.minTtlMs)) ? Number(request.minTtlMs) : 250;
+  const expiresAtMs = normalizeExpiryMs(quote.expiry?.timestamp);
+  if (expiresAtMs > 0 && expiresAtMs <= Date.now() + minTtlMs) {
     return `expiry ${expiresAtMs} too close`;
   }
 
   return null;
 }
 
-export function isRfqQuoteUsable(quote, { rfqId, marketId, direction, worstPrice }) {
-  return !getRfqQuoteRejectReason(quote, { rfqId, marketId, direction, worstPrice });
+export function isRfqQuoteUsable(quote, request) {
+  return !getRfqQuoteRejectReason(quote, request);
 }
 
 export function sortRfqQuotes(quotes, direction) {
@@ -720,6 +733,9 @@ export function buildRfqQuoteResult({
   marketId,
   direction,
   worstPrice,
+  onlyMakers = null,
+  excludeMakers = null,
+  minTtlMs = 250,
 }) {
   const candidateRfqIds = [
     Number(ack?.rfqId || 0) > 0 ? Number(ack.rfqId) : null,
@@ -732,7 +748,7 @@ export function buildRfqQuoteResult({
   for (const candidateRfqId of candidateRfqIds) {
     const candidateQuotes = selectRfqQuotesForAccept(
       quotes,
-      { rfqId: candidateRfqId, marketId, direction, worstPrice }
+      { rfqId: candidateRfqId, marketId, direction, worstPrice, onlyMakers, excludeMakers, minTtlMs }
     );
     if (candidateQuotes.length > 0 || !selectedQuotes.length) {
       rfqId = candidateRfqId;
@@ -741,9 +757,27 @@ export function buildRfqQuoteResult({
     if (candidateQuotes.length > 0) break;
   }
 
-  const rejectionReasons = quotes
+  const quoteDiagnostics = quotes.map(quote => {
+    const expiryMs = normalizeExpiryMs(quote.expiry?.timestamp);
+    return {
+      maker: quote.maker,
+      price: quote.price,
+      quantity: quote.quantity,
+      ttlMs: expiryMs > 0 ? expiryMs - Date.now() : null,
+      rejectionReason: getRfqQuoteRejectReason(quote, {
+        rfqId,
+        marketId,
+        direction,
+        worstPrice,
+        onlyMakers,
+        excludeMakers,
+        minTtlMs,
+      }),
+    };
+  });
+  const rejectionReasons = quoteDiagnostics
     .slice(0, 3)
-    .map(quote => getRfqQuoteRejectReason(quote, { rfqId, marketId, direction, worstPrice }))
+    .map(quote => quote.rejectionReason)
     .filter(Boolean);
 
   return {
@@ -753,6 +787,7 @@ export function buildRfqQuoteResult({
     status: ack?.status ?? null,
     rawQuoteCount: quotes.length,
     rejectionReasons,
+    quoteDiagnostics,
     quotes: selectedQuotes,
   };
 }
@@ -767,6 +802,10 @@ export async function requestRfqQuotes({
   collectMs = RFQ_COLLECT_QUOTES_MS,
   requestTimeoutMs = RFQ_REQUEST_TIMEOUT_MS,
   socketFactory = (args) => new RfqTakerSocket(args),
+  priceCheck = true,
+  onlyMakers = null,
+  excludeMakers = null,
+  minTtlMs = 250,
 }) {
   const clientId = randomId();
   const quotes = [];
@@ -791,6 +830,9 @@ export async function requestRfqQuotes({
       marketId,
       direction,
       worstPrice,
+      onlyMakers,
+      excludeMakers,
+      minTtlMs,
     }));
   };
 
@@ -872,7 +914,7 @@ export async function requestRfqQuotes({
         quantity,
         worstPrice,
         expiry: 0,
-        priceCheck: true,
+        priceCheck,
       });
     });
   } finally {
