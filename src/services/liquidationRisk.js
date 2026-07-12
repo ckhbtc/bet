@@ -1,6 +1,6 @@
 import { liquidationPrice } from '../data/mockData.js';
 
-export const DANGEROUS_LIQUIDATION_CUSHION_RATIO = 0.2;
+const DANGEROUS_LIQUIDATION_CUSHION_RATIO = 0.2;
 
 export function derivePositionLiqPrice(position) {
   const directLiq = Number(position?.liqPrice);

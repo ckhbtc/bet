@@ -40,10 +40,7 @@ import {
 } from './cctp.js';
 import { api } from './api.js';
 
-// ─── Re-exports for callers (BridgeModal expects these here) ──────────────
-export { SOURCE_CHAINS, INJECTIVE, FAST_FINALITY, STANDARD_FINALITY } from './cctp.js';
-
-// ─── Helpers ──────────────────────────────────────────────────────────────
+export { SOURCE_CHAINS, INJECTIVE, FAST_FINALITY } from './cctp.js';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -61,11 +58,6 @@ async function fetchInjectiveEvmUsdcBalanceUnits(ethAddress) {
     functionName: 'balanceOf',
     args: [getAddress(ethAddress)],
   });
-}
-
-export async function fetchInjectiveEvmUsdcBalance(ethAddress) {
-  const units = await fetchInjectiveEvmUsdcBalanceUnits(ethAddress);
-  return Number(formatUnits(units, 6));
 }
 
 async function waitForInjectiveEvmUsdcBalance({
@@ -124,8 +116,6 @@ async function ensureChain(chain) {
   }
 }
 
-// ─── CCTP V2 fee-quote helpers (Fast mode) ────────────────────────────────
-//
 // Standard mode burns with finalityThreshold = 2000 and maxFee = 0 — Circle
 // waits for finalized attestation, free. Fast mode burns with threshold =
 // 1000 and a non-zero maxFee scaled from Circle's posted minimumFee (bps).
@@ -189,7 +179,7 @@ export async function fetchRouteFees(srcDomain, dstDomain, { fresh = false } = {
   return entries;
 }
 
-export async function fetchFastAllowance() {
+async function fetchFastAllowance() {
   const res = await fetch(`${ATTESTATION_API}/v2/fastBurn/USDC/allowance`, {
     headers: { Accept: 'application/json' },
   });
@@ -223,8 +213,6 @@ async function getTransferParams(amount, srcDomain, dstDomain, mode) {
   };
 }
 
-// ─── Source-side reads ────────────────────────────────────────────────────
-
 export async function fetchSourceUsdcBalance(chainId, account) {
   const chain = SOURCE_CHAINS.find((c) => c.id === chainId);
   if (!chain) throw new Error(`Unsupported source chain: ${chainId}`);
@@ -236,8 +224,6 @@ export async function fetchSourceUsdcBalance(chainId, account) {
     args: [getAddress(account)],
   });
 }
-
-// ─── Attestation polling ──────────────────────────────────────────────────
 
 async function pollAttestation(srcDomain, burnTxHash) {
   const url = `${ATTESTATION_API}/v2/messages/${srcDomain}?transactionHash=${burnTxHash}`;
@@ -263,8 +249,6 @@ async function pollAttestation(srcDomain, burnTxHash) {
     await sleep(5000);
   }
 }
-
-// ─── High-level orchestrator ──────────────────────────────────────────────
 
 /**
  * Run a CCTP V2 inbound bridge: USDC on `sourceChainId` → native USDC on

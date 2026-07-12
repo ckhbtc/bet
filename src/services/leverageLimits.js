@@ -2,9 +2,9 @@ import Decimal from 'decimal.js';
 
 export const RFQ_OPEN_SLIPPAGE = 0.01;
 export const DEFAULT_INITIAL_MARGIN_RATIO = '0.05';
-export const STANDARD_MAX_LEVERAGE_STEPS = [5, 10, 25, 50, 100];
+const STANDARD_MAX_LEVERAGE_STEPS = [5, 10, 25, 50, 100];
 
-export const LEVERAGE_PRESET_ROWS = [
+const LEVERAGE_PRESET_ROWS = [
   { maxLeverage: 5, levels: { LOW: 1, MEDIUM: 2, HIGH: 3, MAX: 5 } },
   { maxLeverage: 10, levels: { LOW: 2, MEDIUM: 3, HIGH: 5, MAX: 10 } },
   { maxLeverage: 25, levels: { LOW: 2, MEDIUM: 5, HIGH: 10, MAX: 25 } },
@@ -12,7 +12,7 @@ export const LEVERAGE_PRESET_ROWS = [
   { maxLeverage: 100, levels: { LOW: 10, MEDIUM: 25, HIGH: 50, MAX: 100 } },
 ];
 
-export const LEVERAGE_LEVEL_META = {
+const LEVERAGE_LEVEL_META = {
   LOW: { label: 'Conservative', desc: 'Lower risk', color: '#4a9eff' },
   MEDIUM: { label: 'Balanced', desc: 'Middle ground', color: '#f59e0b' },
   HIGH: { label: 'Degen', desc: 'Higher risk', color: '#ef4444' },
@@ -37,7 +37,7 @@ function nonNegativeDecimal(value, fallback = '0') {
   }
 }
 
-export function effectiveOpenMarginRatio(initialMarginRatio, slippage = RFQ_OPEN_SLIPPAGE) {
+function effectiveOpenMarginRatio(initialMarginRatio, slippage = RFQ_OPEN_SLIPPAGE) {
   const imr = positiveDecimal(initialMarginRatio, DEFAULT_INITIAL_MARGIN_RATIO);
   const slip = nonNegativeDecimal(slippage);
   return slip.plus(imr.mul(slip.plus(1)));

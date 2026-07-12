@@ -277,9 +277,8 @@ const useMarketStore = create((set, get) => ({
 
   startPolling: (injAddress) => {
     const { pollInterval } = get();
-    if (pollInterval) return; // Already polling
+    if (pollInterval) return;
 
-    // Initial fetch
     get().fetchMarkets();
     if (injAddress) get().fetchPositions(injAddress);
 

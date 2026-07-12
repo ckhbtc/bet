@@ -6,12 +6,12 @@ export function nextOpenPnlGraceExpiresAt(now = Date.now()) {
   return now + OPEN_PNL_GRACE_MS;
 }
 
-export function isFreshOptimisticPosition(position, now = Date.now()) {
+function isFreshOptimisticPosition(position, now = Date.now()) {
   return Boolean(position?.optimistic)
     && (!position.optimisticExpiresAt || Number(position.optimisticExpiresAt) > now);
 }
 
-export function isOpenPnlGraceActive(position, now = Date.now()) {
+function isOpenPnlGraceActive(position, now = Date.now()) {
   return Number(position?.pnlGraceExpiresAt || 0) > now;
 }
 

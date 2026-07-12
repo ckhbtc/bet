@@ -25,9 +25,9 @@ the position.
 
 ## Tech
 
-React 18 + Vite + zustand on the client. Express on the server (only for the
-fresh-wallet faucet — everything else runs in-browser). `@injectivelabs/sdk-ts`
-1.17.8 (pinned — newer breaks EIP-712).
+React 18 + Vite + zustand on the client. Express handles the fresh-wallet
+faucet, permissionless CCTP mint relay, and broadcast of already-signed RFQ
+transactions. Trade keys and signing stay in-browser.
 
 ## Run locally
 
@@ -52,7 +52,7 @@ npm start                  # → http://localhost:36000 (or PORT env)
 
 | Variable | Required | What it does |
 |---|---|---|
-| `FAUCET_PRIVATE_KEY` | Optional | Hex EVM private key for an INJ wallet. The server uses it to send 0.001 INJ to fresh wallets so they can pay gas for their first AuthZ grant. If unset, the faucet is a no-op and brand-new wallets won't be able to authorize until they fund themselves manually. |
+| `FAUCET_PRIVATE_KEY` | Optional | Hex EVM private key for an INJ wallet. The server uses it to fund fresh wallets and pay gas for permissionless CCTP mint submissions. If unset, both operations are unavailable. |
 | `PORT` | Optional | Production listen port for `server.js`. Defaults to `36000`. |
 | `API_PORT` | Optional | Dev-only API port for `dev-server.js`. Defaults to `36001`. |
 
@@ -66,8 +66,9 @@ streams). For every subsequent bet, the browser wraps the trade message in
 `MsgBroadcasterWithPk.broadcastWithFeeDelegation` — no popup, no gas, no
 server roundtrip. When the user chooses Revoke autosign, the browser signs
 `MsgRevoke` from the granter wallet for each delegated trading message type and
-then clears the local grantee key. The Express server only exists to faucet
-brand-new wallets; trade endpoints don't exist.
+then clears the local grantee key. The Express server faucets brand-new wallets,
+submits permissionless CCTP mints, and broadcasts already-signed RFQ transactions.
+It never receives a user's trade key.
 
 For the long version see [`~/.claude/skills/injective-autosign/SKILL.md`](https://github.com/ckhbtc/bet#readme)
 in the dev's local skills (architecture choices: client custody vs server
@@ -82,28 +83,29 @@ src/
 ├── data/mockData.js         # AGGRESSIVENESS, formatPrice/formatDollar, liq math
 ├── services/
 │   ├── grantee.js           # localStorage helpers — keyed by granter inj1
-│   ├── trade.js             # client-side tradeOpen/tradeClose, MsgAuthzExec broadcast
+│   ├── trade.js             # shared AuthZ broadcast and orderbook cleanup helpers
 │   ├── autosign.js          # grantAuthZ/revokeAuthZ — signs MsgGrant/MsgRevoke
 │   ├── authzMessages.js     # shared AuthZ grant/revoke message builders
 │   ├── injective.js         # read APIs (markets, prices, balances, positions)
-│   ├── api.js               # only initAccount (faucet) hits the server
+│   ├── api.js               # client wrappers for faucet and CCTP relay
 │   ├── cctp.js              # CCTP V2 chain configs + ABIs (ported from usdc-widget)
 │   ├── bridge.js            # CCTP V2 burn-and-mint: 6 EVM chains → native USDC on Injective
 │   └── wallet.js            # connect/disconnect MetaMask + accountsChanged
 ├── stores/                  # zustand: walletStore, sessionStore, marketStore
-├── styles/global.css        # CSS-vars-based theming (3 themes)
+├── styles/global.css        # CSS-vars-based Bauhaus theming (2 variants)
 └── server/
-    ├── api.js               # /api/init-account router only
-    └── faucet.js            # signs the faucet MsgSend with FAUCET_PRIVATE_KEY
+    ├── api.js               # faucet, CCTP relay, and signed RFQ relay routes
+    ├── faucet.js            # funds fresh accounts with FAUCET_PRIVATE_KEY
+    ├── relayMint.js          # submits permissionless CCTP mints
+    └── rfqBroadcast.js       # broadcasts already-signed RFQ transactions
 ```
 
 ## Themes
 
-Three themes, switchable via the top-right pill:
+Two Bauhaus variants, switchable via the top-right pill:
 
-- **Bauhaus** (default) — cream paper, primary red/blue/yellow, Archivo Black
-- **Dark** — Atrium navy + cyan/blue gradient
-- **Light** — Hearth warm cream + terracotta
+- **Bauhaus** (default) — cream paper, ink text, red and yellow accents
+- **Bauhaus dark** — warm ink paper, cream text, red and yellow accents
 
 ## Hidden features
 

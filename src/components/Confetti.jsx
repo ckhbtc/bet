@@ -8,10 +8,6 @@ const COLORS = [
   '#60a5fa', // blue
 ];
 
-/**
- * One-shot confetti burst. Renders a fixed number of falling chips with
- * randomized per-chip timing and trajectory; parent unmounts after ~3s.
- */
 export default function Confetti({ count = 80 }) {
   const pieces = useMemo(() => {
     return Array.from({ length: count }, (_, i) => ({

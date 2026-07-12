@@ -1,4 +1,4 @@
-export const INJECTIVE_EXPLORER_URL = 'https://tcx.inj.so';
+const INJECTIVE_EXPLORER_URL = 'https://tcx.inj.so';
 
 export function txExplorerUrl(txHash) {
   return `${INJECTIVE_EXPLORER_URL}/tx/${encodeURIComponent(txHash)}?network=mainnet&mode=all`;
