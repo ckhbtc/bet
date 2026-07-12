@@ -15,7 +15,6 @@ import { txExplorerUrl } from '../services/explorer';
 import useWalletStore from '../stores/walletStore';
 import { formatUsdcBalance } from '../data/mockData';
 
-// Human-readable status copy keyed by the phase emitted by executeBridge().
 const PHASE_COPY = {
   'approve-sign':    'Approve USDC — confirm in wallet',
   'approve-confirm': 'Approving USDC...',
@@ -65,7 +64,6 @@ export default function BridgeModal({ onClose }) {
     [sourceChainId],
   );
 
-  // Pull the source-side USDC balance whenever the chain or wallet changes.
   useEffect(() => {
     let cancelled = false;
     setSrcBalance(null);
@@ -77,7 +75,6 @@ export default function BridgeModal({ onClose }) {
     return () => { cancelled = true; };
   }, [sourceChainId, ethAddress]);
 
-  // Close the chain menu on outside click or Escape.
   useEffect(() => {
     if (!chainMenuOpen) return;
     const onDocClick = (e) => {
@@ -142,7 +139,9 @@ export default function BridgeModal({ onClose }) {
       pollBalancesUntilChange({
         expectedDelta,
         startBalance: usdcBalanceBefore,
-      }).catch(() => {});
+      }).catch((err) => {
+        console.warn('Post-bridge balance polling stopped unexpectedly:', err);
+      });
     } catch (err) {
       const msg = err.shortMessage || err.message || String(err);
       setError(

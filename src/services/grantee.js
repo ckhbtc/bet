@@ -8,15 +8,45 @@
  */
 
 const KEY = 'bet-grantee';
+const INJECTIVE_ADDRESS_RE = /^inj1[023456789acdefghjklmnpqrstuvwxyz]{38}$/;
+const EVM_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
+const PRIVATE_KEY_RE = /^(?:0x)?[0-9a-fA-F]{64}$/;
 
 function nowSec() { return Math.floor(Date.now() / 1000); }
+
+/**
+ * @typedef {object} GranteeSession
+ * @property {string} privateKeyHex
+ * @property {string} granteeAddress
+ * @property {string} granterAddress
+ * @property {string} ethAddress
+ * @property {number} evmChainId
+ * @property {number} expiration
+ * @property {number} [scopeVersion]
+ */
+
+function isPositiveInteger(value) {
+  return Number.isInteger(value) && value > 0;
+}
+
+function isGranteeSession(entry, granterAddress) {
+  if (!entry || typeof entry !== 'object' || Array.isArray(entry)) return false;
+  if (entry.granterAddress !== granterAddress) return false;
+  if (!INJECTIVE_ADDRESS_RE.test(entry.granterAddress)) return false;
+  if (!INJECTIVE_ADDRESS_RE.test(entry.granteeAddress)) return false;
+  if (!EVM_ADDRESS_RE.test(entry.ethAddress)) return false;
+  if (!PRIVATE_KEY_RE.test(entry.privateKeyHex)) return false;
+  if (!isPositiveInteger(entry.evmChainId)) return false;
+  if (!isPositiveInteger(entry.expiration)) return false;
+  return entry.scopeVersion === undefined || isPositiveInteger(entry.scopeVersion);
+}
 
 function readAll() {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return {};
     const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === 'object' ? parsed : {};
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
   } catch {
     return {};
   }
@@ -32,6 +62,11 @@ export function getGrantee(granterAddress) {
   const all = readAll();
   const entry = all[granterAddress];
   if (!entry) return null;
+  if (!isGranteeSession(entry, granterAddress)) {
+    delete all[granterAddress];
+    writeAll(all);
+    return null;
+  }
   if (entry.expiration && entry.expiration <= nowSec()) {
     delete all[granterAddress];
     writeAll(all);

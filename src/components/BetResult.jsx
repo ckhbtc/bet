@@ -1,8 +1,26 @@
+import { useState } from 'react';
 import { formatPrice } from '../data/mockData';
 
 export default function BetResult({ bet, onPlaceAnother, onGoHome }) {
   const isWin = bet.pnl >= 0;
   const priceDecimals = bet.market?.priceDecimals;
+  const [shareStatus, setShareStatus] = useState(null);
+
+  const handleShare = async () => {
+    const text = `I just won +$${bet.pnl.toFixed(2)} betting ${bet.asset} ${bet.direction === 'up' ? '📈' : '📉'} on YOLO!`;
+    try {
+      if (navigator.share) {
+        await navigator.share({ text });
+        return;
+      }
+      await navigator.clipboard.writeText(text);
+      setShareStatus('Copied to clipboard');
+    } catch (err) {
+      if (err?.name === 'AbortError') return;
+      console.warn('Sharing win failed:', err);
+      setShareStatus('Could not share');
+    }
+  };
 
   return (
     <div style={{
@@ -88,14 +106,7 @@ export default function BetResult({ bet, onPlaceAnother, onGoHome }) {
           }}>Home</button>
           {isWin && (
             <button
-              onClick={() => {
-                const text = `I just won +$${bet.pnl.toFixed(2)} betting ${bet.asset} ${bet.direction === 'up' ? '📈' : '📉'} on YOLO!`;
-                if (navigator.share) {
-                  navigator.share({ text }).catch(() => {});
-                } else {
-                  navigator.clipboard.writeText(text).catch(() => {});
-                }
-              }}
+              onClick={handleShare}
               style={{
                 flex: 1, background: 'rgba(74, 158, 255, 0.1)', border: '1px solid var(--blue)',
                 borderRadius: 10, padding: '12px 0', color: 'var(--blue)',
@@ -109,6 +120,11 @@ export default function BetResult({ bet, onPlaceAnother, onGoHome }) {
             fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: 'var(--font-heading)',
           }}>Bet Again</button>
         </div>
+        {shareStatus && (
+          <div aria-live="polite" style={{ marginTop: 8, fontSize: 12, color: 'var(--text-muted)' }}>
+            {shareStatus}
+          </div>
+        )}
       </div>
     </div>
   );

@@ -1,9 +1,5 @@
-/**
- * Server API surface — kept small. The only thing the server still owns
- * is the faucet (FAUCET_PRIVATE_KEY can't safely live in the browser).
- * AuthZ session keys, trade signing, and broadcast all happen in-browser
- * now via services/grantee.js + services/trade.js.
- */
+// Trade keys and signing stay in-browser. These wrappers only call the
+// account faucet and permissionless CCTP mint relay.
 
 async function call(path, { method = 'GET', body } = {}) {
   const res = await fetch(`/api${path}`, {
@@ -12,12 +8,28 @@ async function call(path, { method = 'GET', body } = {}) {
     body: body ? JSON.stringify(body) : undefined,
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error || `Request failed (${res.status})`);
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error(`Invalid response from ${path}`);
+  }
+  if (!res.ok) {
+    const message = typeof data.error === 'string' && data.error
+      ? data.error
+      : `Request failed (${res.status})`;
+    throw new Error(message);
+  }
+  return data;
+}
+
+async function callForTx(path, options) {
+  const data = await call(path, options);
+  if (data.ok !== true || typeof data.txHash !== 'string' || !data.txHash.trim()) {
+    throw new Error(`Invalid response from ${path}`);
+  }
   return data;
 }
 
 export const api = {
-  initAccount: (wallet) => call('/init-account', { method: 'POST', body: { wallet } }),
+  initAccount: (wallet) => callForTx('/init-account', { method: 'POST', body: { wallet } }),
   relayMint: (message, attestation) =>
-    call('/relay-mint', { method: 'POST', body: { message, attestation } }),
+    callForTx('/relay-mint', { method: 'POST', body: { message, attestation } }),
 };
