@@ -13,9 +13,9 @@
  */
 
 import { ethers } from 'ethers';
+import { INJECTIVE_EVM_RPC_URL } from '../services/injectiveNetwork.js';
 
 const FAUCET_PRIVATE_KEY = process.env.FAUCET_PRIVATE_KEY ?? '';
-const INJ_EVM_RPC = 'https://sentry.evm-rpc.injective.network/';
 
 const MESSAGE_TRANSMITTER_ADDR = '0x81D40F21F12A8F0E3252Bccb954D722d4c464B64';
 const MESSAGE_TRANSMITTER_ABI = [
@@ -77,7 +77,7 @@ export function relayGasPriceFromFeeData(feeData) {
 }
 
 async function evmRpc(method, params) {
-  const res = await fetch(INJ_EVM_RPC, {
+  const res = await fetch(INJECTIVE_EVM_RPC_URL, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ jsonrpc: '2.0', id: Date.now(), method, params }),
@@ -117,7 +117,7 @@ export async function relayMint({ message, attestation }, ip) {
     throw new Error(`Message dst domain ${dst} != ${INJECTIVE_DOMAIN} (Injective)`);
   }
 
-  const provider = new ethers.JsonRpcProvider(INJ_EVM_RPC);
+  const provider = new ethers.JsonRpcProvider(INJECTIVE_EVM_RPC_URL);
   const wallet = new ethers.Wallet(FAUCET_PRIVATE_KEY, provider);
   const contract = new ethers.Contract(MESSAGE_TRANSMITTER_ADDR, MESSAGE_TRANSMITTER_ABI, wallet);
   const gasEstimate = await contract.receiveMessage.estimateGas(message, attestation);

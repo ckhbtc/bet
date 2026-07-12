@@ -1,9 +1,9 @@
 import { createHash } from 'node:crypto';
+import { RFQ_TIMING_PREFIX } from '../services/rfqConstants.js';
 
 const DEFAULT_LCD_URLS = ['https://sentry.lcd.injective.network'];
 const DEFAULT_RPC_URLS = ['https://sentry.tm.injective.network'];
 const TX_BYTES_RE = /^[A-Za-z0-9+/]+={0,2}$/;
-const RFQ_TIMING_PREFIX = '[RFQ-TIMING]';
 
 function configuredUrls(envKey, defaults) {
   const configured = (process.env[envKey] || '')
@@ -37,7 +37,7 @@ function validateTxBytes(txBytes) {
   }
 }
 
-export function txHashFromBase64(txBytes) {
+function txHashFromBase64(txBytes) {
   return createHash('sha256')
     .update(Buffer.from(txBytes, 'base64'))
     .digest('hex')

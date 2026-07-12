@@ -1,11 +1,6 @@
 /**
- * Client-side trade execution — signs and broadcasts MsgAuthzExec from
- * the browser using the locally-stored grantee key. Mirrors what the
- * server's executor.js used to do, but with the private key never
- * leaving the user's machine.
- *
- * Uses Injective's fee-delegation relay so trades are gas-free for the
- * grantee — same UX as the old server-broadcast path.
+ * Client-side trade execution and shared orderbook helpers. AuthZ broadcasts
+ * use the locally stored grantee key, which never leaves the browser.
  */
 
 import {
@@ -19,17 +14,17 @@ import {
   IndexerGrpcOracleApi,
   IndexerGrpcDerivativesApi,
 } from '@injectivelabs/sdk-ts';
-import { getNetworkEndpoints, Network } from '@injectivelabs/networks';
+import { getNetworkEndpoints } from '@injectivelabs/networks';
 import Decimal from 'decimal.js';
 import { getGrantee } from './grantee.js';
+import { INJECTIVE_NETWORK } from './injectiveNetwork.js';
 import { toChainPrice, toChainQty, toChainMargin } from './tradeMath.js';
 
-const NETWORK = Network.MainnetSentry;
-const endpoints = getNetworkEndpoints(NETWORK);
+const endpoints = getNetworkEndpoints(INJECTIVE_NETWORK);
 const oracleApi = new IndexerGrpcOracleApi(endpoints.indexer);
 const derivativesApi = new IndexerGrpcDerivativesApi(endpoints.indexer);
 
-// ─── Markets cache ─────────────────────────────────────────────────────────
+// ─── Markets cache ──────────────────────────────────────────────────────────
 
 let _marketsCache = null;
 let _marketsCacheTs = 0;
@@ -59,7 +54,7 @@ export async function getMarket(marketId) {
   return m;
 }
 
-// ─── Broadcast via AuthZ + fee delegation ──────────────────────────────────
+// ─── Broadcast via AuthZ + fee delegation ─────────────────────────────────
 
 export async function broadcastViaAuthz(msgs, session) {
   const msgExec = MsgAuthzExec.fromJSON({
@@ -69,7 +64,7 @@ export async function broadcastViaAuthz(msgs, session) {
 
   for (const gasBuffer of [12.0, 20.0]) {
     const broadcaster = new MsgBroadcasterWithPk({
-      network: NETWORK,
+      network: INJECTIVE_NETWORK,
       endpoints,
       privateKey: session.privateKeyHex,
       evmChainId: session.evmChainId,
@@ -155,10 +150,10 @@ export async function cleanupReduceOnlyOrdersForMarket({ session, market }) {
   return { cancelled };
 }
 
-// ─── Open trade (market order) + optional reduce-only TP limit ─────────────
+// ─── Open trade (market order) + optional reduce-only TP limit ────────────
 
 export async function tradeOpen({
-  granterAddress, marketId, side, stakeUsdt, leverage, slippage = 0.01, tpPrice = null,
+  granterAddress, marketId, side, stakeUsdc, leverage, slippage = 0.01, tpPrice = null,
 }) {
   const session = requireSession(granterAddress);
   const market = await getMarket(marketId);
@@ -166,7 +161,7 @@ export async function tradeOpen({
 
   const oraclePrice = await fetchOraclePriceForMarket(market);
 
-  const stake = new Decimal(stakeUsdt);
+  const stake = new Decimal(stakeUsdc);
   const lev = new Decimal(leverage);
 
   const slipMul = isBuy ? new Decimal(1).plus(slippage) : new Decimal(1).minus(slippage);
@@ -226,7 +221,7 @@ export async function tradeOpen({
   return { ...openResult, takeProfit };
 }
 
-// ─── Close position (market order) ─────────────────────────────────────────
+// ─── Close position (market order) ────────────────────────────
 
 export async function tradeClose({
   granterAddress, marketId, side, quantity, slippage = 0.02,
@@ -235,13 +230,7 @@ export async function tradeClose({
   const market = await getMarket(marketId);
   const isClosingLong = side === 'long';
 
-  const oracleRes = await oracleApi.fetchOraclePrice({
-    baseSymbol: market.oracleBase,
-    quoteSymbol: market.oracleQuote,
-    oracleType: market.oracleType,
-  }).catch(() => null);
-  const oraclePrice = oracleRes?.price ? new Decimal(oracleRes.price) : null;
-  if (!oraclePrice) throw new Error(`Cannot fetch oracle price for ${market.symbol}`);
+  const oraclePrice = await fetchOraclePriceForMarket(market);
 
   const slipMul = isClosingLong
     ? new Decimal(1).minus(slippage)

@@ -13,7 +13,7 @@ import {
 } from '@injectivelabs/sdk-ts';
 import { MsgExec as AuthzMsgExecPb } from '@injectivelabs/core-proto-ts-v2/generated/cosmos/authz/v1beta1/tx_pb.js';
 import { MsgExecuteContractCompat as WasmxMsgExecuteContractCompatPb } from '@injectivelabs/core-proto-ts-v2/generated/injective/wasmx/v1/tx_pb.js';
-import { getNetworkEndpoints, Network } from '@injectivelabs/networks';
+import { getNetworkEndpoints } from '@injectivelabs/networks';
 import {
   CreateRFQRequestType,
   TakerStreamResponse,
@@ -31,6 +31,7 @@ import {
   RFQ_PREPARE_RETRY_DELAY_MS,
   RFQ_RELAY_HEAD_START_MS,
   RFQ_REQUEST_TIMEOUT_MS,
+  RFQ_TIMING_PREFIX,
   RFQ_WS_URL,
 } from './rfqConstants.js';
 import { AUTHZ_SCOPE_VERSION } from './authzMessages.js';
@@ -49,15 +50,21 @@ import {
   assertOpenMarginAllowed,
   initialMarginCheckPrice,
 } from './leverageLimits.js';
+import { INJECTIVE_NETWORK } from './injectiveNetwork.js';
+import {
+  canonicalDecimal,
+  humanPriceTick,
+  quantizeDecimal,
+} from './rfqMath.js';
+
+export { quantizeDecimal } from './rfqMath.js';
 
 const GRPC_HEADER_SIZE = 5;
 const GRPC_COMPRESSION_NONE = 0;
 const GRPC_COMPRESSION_TRAILER = 128;
 const MAX_QUOTES_PER_ACCEPT = 8;
-const NETWORK = Network.MainnetSentry;
-const RFQ_TIMING_PREFIX = '[RFQ-TIMING]';
 const RFQ_ACCOUNT_DETAILS_TTL_MS = 5 * 60_000;
-const endpoints = getNetworkEndpoints(NETWORK);
+const endpoints = getNetworkEndpoints(INJECTIVE_NETWORK);
 const authApi = new ChainGrpcAuthApi(endpoints.grpc);
 const txApi = new TxGrpcApi(endpoints.grpc);
 const rfqGatewayApi = new IndexerGrpcRfqGwApi(RFQ_GATEWAY_URL);
@@ -199,14 +206,6 @@ function flushRfqTiming(timing, status, details = {}) {
   };
   console.info(`${RFQ_TIMING_PREFIX} ${timing.flow}.${status}`, summary);
   postRfqTimingSummary(summary);
-}
-
-function canonicalDecimal(value) {
-  const decimal = new Decimal(value);
-  if (!decimal.isFinite()) throw new Error(`Invalid decimal value: ${value}`);
-  const fixed = decimal.toFixed();
-  if (!fixed.includes('.')) return fixed;
-  return fixed.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '') || '0';
 }
 
 function optionalNumber(value) {
@@ -368,14 +367,10 @@ export async function primeRfqAccountCache(granterAddress) {
   const session = requireSession(granterAddress);
   const privateKey = PrivateKey.fromHex(session.privateKeyHex);
   const address = privateKey.toBech32();
-  const cached = readCachedRfqAccountDetails(address);
-  if (cached) return { accountDetails: cached, source: 'cache' };
-  const accountDetails = await fetchAccountDetailsNoThrow(address);
-  rememberRfqAccountDetails(address, accountDetails);
-  return { accountDetails, source: 'network' };
+  return getRfqAccountDetails(address);
 }
 
-async function getRfqAccountDetailsForPrepare(address) {
+async function getRfqAccountDetails(address) {
   const cached = readCachedRfqAccountDetails(address);
   if (cached) return { accountDetails: cached, source: 'cache' };
   const accountDetails = await fetchAccountDetailsNoThrow(address);
@@ -439,18 +434,6 @@ async function resolveRfqOraclePrice({
     oraclePrice: oraclePrice.toFixed(),
   });
   return oraclePrice;
-}
-
-export function quantizeDecimal(value, tick, rounding = Decimal.ROUND_FLOOR) {
-  const decimal = new Decimal(value);
-  const minTick = new Decimal(tick || 0);
-  if (!decimal.isFinite()) throw new Error(`Invalid decimal value: ${value}`);
-  if (!minTick.isFinite() || minTick.lte(0)) return canonicalDecimal(decimal);
-  return canonicalDecimal(decimal.div(minTick).toDecimalPlaces(0, rounding).mul(minTick));
-}
-
-function humanPriceTick(minPriceTickSize) {
-  return new Decimal(minPriceTickSize || '1').div(1_000_000);
 }
 
 function encodeGrpcFrame(payload) {
@@ -1039,12 +1022,7 @@ export function signatureHexToBytes(signature) {
 export function signatureHexToBase64(signature) {
   const bytes = signatureHexToBytes(signature);
   if (!bytes) return signature;
-  if (typeof btoa === 'function') {
-    let binary = '';
-    for (const byte of bytes) binary += String.fromCharCode(byte);
-    return btoa(binary);
-  }
-  return Buffer.from(bytes).toString('base64');
+  return bytesToBase64(bytes);
 }
 
 export function normalizeRfqQuoteForContract(quote) {
@@ -1517,7 +1495,7 @@ export async function executeRfqGatewayAutoSign({
     markRfqTiming(activeTiming, 'account.fetch.start', {
       autosignAddress,
     });
-    const accountLookup = await getRfqAccountDetailsForPrepare(autosignAddress);
+    const accountLookup = await getRfqAccountDetails(autosignAddress);
     const accountDetails = accountLookup.accountDetails;
     markRfqTiming(activeTiming, 'account.fetch.end', {
       source: accountLookup.source,
@@ -1631,9 +1609,9 @@ export async function executeRfqGatewayAutoSign({
   }
 }
 
-export function buildRfqOrderInput({ market, oraclePrice, side, stakeUsdt, leverage, slippage = 0.01 }) {
+export function buildRfqOrderInput({ market, oraclePrice, side, stakeUsdc, leverage, slippage = 0.01 }) {
   const isLong = side === 'long';
-  const stake = new Decimal(stakeUsdt);
+  const stake = new Decimal(stakeUsdc);
   const lev = new Decimal(leverage);
   const price = new Decimal(oraclePrice);
 
@@ -1710,7 +1688,7 @@ export async function tradeOpenRfq({
   granterAddress,
   marketId,
   side,
-  stakeUsdt,
+  stakeUsdc,
   leverage,
   slippage = 0.01,
   tpPrice = null,
@@ -1739,7 +1717,7 @@ export async function tradeOpenRfq({
       providedOraclePrice,
       timing,
     });
-    const input = buildRfqOrderInput({ market, oraclePrice, side, stakeUsdt, leverage, slippage });
+    const input = buildRfqOrderInput({ market, oraclePrice, side, stakeUsdc, leverage, slippage });
     const marginCheckPrice = initialMarginCheckPrice({
       oraclePrice,
       worstPrice: input.worstPrice,

@@ -6,9 +6,9 @@
 
 import { ethers } from 'ethers';
 import { Address } from '@injectivelabs/sdk-ts';
+import { INJECTIVE_EVM_RPC_URL } from '../services/injectiveNetwork.js';
 
 const FAUCET_PRIVATE_KEY = process.env.FAUCET_PRIVATE_KEY ?? '';
-const INJ_EVM_RPC = 'https://sentry.evm-rpc.injective.network/';
 const MIN_BALANCE = ethers.parseEther('0.001');
 
 const _recentInits = new Map();
@@ -20,7 +20,7 @@ export async function initAccount(wallet) {
   if (Date.now() - lastInit < INIT_COOLDOWN_MS) throw new Error('Please wait before retrying');
 
   const ethAddress = Address.fromBech32(wallet).toHex();
-  const provider = new ethers.JsonRpcProvider(INJ_EVM_RPC);
+  const provider = new ethers.JsonRpcProvider(INJECTIVE_EVM_RPC_URL);
   const faucetWallet = new ethers.Wallet(FAUCET_PRIVATE_KEY, provider);
 
   const balance = await provider.getBalance(ethAddress);

@@ -1,33 +1,10 @@
 import Decimal from 'decimal.js';
+import {
+  normalizePriceDecimals,
+  priceDecimalsFromTickSize,
+} from '../services/pricePrecision.js';
 
-// Leaderboard feed (mock — real leaderboard would need indexer queries)
-export const LEADERBOARD_FEED = [
-  { user: '@degen_dan', amount: 420, asset: 'ETH', direction: '↑' },
-  { user: '@whale99', amount: 1200, asset: 'BTC', direction: '↑' },
-  { user: '@solsurfer', amount: 85, asset: 'SOL', direction: '↑' },
-  { user: '@inj_maxi', amount: 310, asset: 'INJ', direction: '↑' },
-  { user: '@moonshot', amount: 2500, asset: 'BTC', direction: '↓' },
-  { user: '@cryptokid', amount: 150, asset: 'AVAX', direction: '↑' },
-  { user: '@yolo_trader', amount: 600, asset: 'ETH', direction: '↓' },
-  { user: '@diamond_hands', amount: 890, asset: 'SOL', direction: '↑' },
-];
-
-export function normalizePriceDecimals(decimals) {
-  const n = Number(decimals);
-  if (!Number.isFinite(n)) return null;
-  return Math.max(0, Math.min(12, Math.floor(n)));
-}
-
-export function priceDecimalsFromTickSize(minPriceTickSize, quoteDecimals = 6) {
-  try {
-    const tick = new Decimal(minPriceTickSize || 0);
-    if (!tick.isFinite() || tick.lte(0)) return null;
-    const humanTick = tick.div(new Decimal(10).pow(quoteDecimals));
-    return normalizePriceDecimals(humanTick.decimalPlaces());
-  } catch {
-    return null;
-  }
-}
+export { priceDecimalsFromTickSize };
 
 export function formatPrice(price, decimals = null) {
   const n = Number(price);

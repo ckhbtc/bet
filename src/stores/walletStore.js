@@ -3,13 +3,13 @@ import { connectWallet, onAccountsChanged } from '../services/wallet';
 import { fetchBalances } from '../services/injective';
 import { clearGrantee } from '../services/grantee';
 import { visibleUsdcBalanceState } from './walletBalance.js';
+import useSessionStore from './sessionStore';
 
-// Load sessionStore lazily to avoid circular module init.
 function clearSession(granterAddress) {
   if (granterAddress) clearGrantee(granterAddress);
-  import('./sessionStore').then(m => m.default.setState({
+  useSessionStore.setState({
     active: false, expiration: null, granterAddress: null, revoking: false, status: '', error: null,
-  })).catch(() => {});
+  });
 }
 
 let unsubscribeAccountsChanged = null;
@@ -18,6 +18,17 @@ function clearAccountsChangedListener() {
   if (!unsubscribeAccountsChanged) return;
   unsubscribeAccountsChanged();
   unsubscribeAccountsChanged = null;
+}
+
+function fetchedBalancesState(balances) {
+  return state => ({
+    balances,
+    ...visibleUsdcBalanceState({
+      fetchedTotal: balances.usdcTotal,
+      floor: state.usdcBalanceFloor,
+      floorExpiresAt: state.usdcBalanceFloorExpiresAt,
+    }),
+  });
 }
 
 const useWalletStore = create((set, get) => ({
@@ -46,7 +57,6 @@ const useWalletStore = create((set, get) => ({
 
       get().refreshBalances();
 
-      // Listen for account changes from the wallet itself.
       clearAccountsChangedListener();
       unsubscribeAccountsChanged = onAccountsChanged((info) => {
         const prev = get().injAddress;
@@ -92,14 +102,7 @@ const useWalletStore = create((set, get) => ({
     if (!injAddress) return;
     try {
       const balances = await fetchBalances(injAddress);
-      set(state => ({
-        balances,
-        ...visibleUsdcBalanceState({
-          fetchedTotal: balances.usdcTotal,
-          floor: state.usdcBalanceFloor,
-          floorExpiresAt: state.usdcBalanceFloorExpiresAt,
-        }),
-      }));
+      set(fetchedBalancesState(balances));
     } catch (err) {
       console.error('Failed to fetch balances:', err);
     }
@@ -145,14 +148,7 @@ const useWalletStore = create((set, get) => ({
     while (Date.now() < deadline) {
       try {
         const balances = await fetchBalances(injAddress);
-        set(state => ({
-          balances,
-          ...visibleUsdcBalanceState({
-            fetchedTotal: balances.usdcTotal,
-            floor: state.usdcBalanceFloor,
-            floorExpiresAt: state.usdcBalanceFloorExpiresAt,
-          }),
-        }));
+        set(fetchedBalancesState(balances));
         if (balances.usdcTotal > start && balances.usdcTotal >= target) {
           return true;
         }

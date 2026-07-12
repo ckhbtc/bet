@@ -11,9 +11,14 @@
  * Reference: https://developers.circle.com/cctp/references/contract-addresses
  */
 
-// ─── Constants ──────────────────────────────────────────────────────────────
+import {
+  INJECTIVE_EVM_CHAIN_ID,
+  INJECTIVE_EVM_EXPLORER_URL,
+  INJECTIVE_EVM_RPC_URL,
+  INJECTIVE_USDC_ADDRESS,
+} from './injectiveNetwork.js';
 
-export const CCTP_V2 = {
+const CCTP_V2 = {
   tokenMessenger: '0x28b5a0e9C621a5BadaA536219b3a228C8168cf5d',
   messageTransmitter: '0x81D40F21F12A8F0E3252Bccb954D722d4c464B64',
   tokenMinter: '0xfd78EE919681417d192449715b2594ab58f5D002',
@@ -29,17 +34,15 @@ export const STANDARD_MAX_FEE = 0n;
 export const ZERO_BYTES32 =
   '0x0000000000000000000000000000000000000000000000000000000000000000';
 
-// ─── Chain configs ──────────────────────────────────────────────────────────
-
 export const INJECTIVE = {
-  id: 1776,
+  id: INJECTIVE_EVM_CHAIN_ID,
   domain: 29,
   name: 'Injective',
-  rpcs: ['https://sentry.evm-rpc.injective.network'],
-  explorer: 'https://blockscout.injective.network',
+  rpcs: [INJECTIVE_EVM_RPC_URL],
+  explorer: INJECTIVE_EVM_EXPLORER_URL,
   nativeCurrency: { name: 'INJ', symbol: 'INJ', decimals: 18 },
   // USDC ERC-20 on Injective EVM (Cosmos bank denom: erc20:0xa00C59fF...).
-  usdc: '0xa00C59fF5a080D2b954d0c75e46E22a0c371235a',
+  usdc: INJECTIVE_USDC_ADDRESS,
   cctp: CCTP_V2,
 };
 
@@ -131,8 +134,6 @@ export const SOURCE_CHAINS = [
   },
 ];
 
-// Build a minimal viem chain object compatible with createPublicClient /
-// createWalletClient. Works for any entry in SOURCE_CHAINS or INJECTIVE.
 export function viemChain(c) {
   return {
     id: c.id,
@@ -147,8 +148,6 @@ export function viemChain(c) {
     },
   };
 }
-
-// ─── ABIs ───────────────────────────────────────────────────────────────────
 
 export const TOKEN_MESSENGER_V2_ABI = [
   {
@@ -165,19 +164,6 @@ export const TOKEN_MESSENGER_V2_ABI = [
       { name: 'minFinalityThreshold', type: 'uint32' },
     ],
     outputs: [{ name: 'nonce', type: 'uint64' }],
-  },
-];
-
-export const MESSAGE_TRANSMITTER_V2_ABI = [
-  {
-    type: 'function',
-    name: 'receiveMessage',
-    stateMutability: 'nonpayable',
-    inputs: [
-      { name: 'message', type: 'bytes' },
-      { name: 'attestation', type: 'bytes' },
-    ],
-    outputs: [{ name: 'success', type: 'bool' }],
   },
 ];
 

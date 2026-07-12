@@ -1,9 +1,13 @@
+export {
+  INJECTIVE_CHAIN_ID as RFQ_CHAIN_ID,
+  INJECTIVE_EVM_CHAIN_ID as RFQ_EVM_CHAIN_ID,
+} from './injectiveNetwork.js';
+
 export const RFQ_CONTRACT_ADDRESS = 'inj12stwq95jet57edcu4a65r48r46s9rzrs938n8k';
 export const RFQ_WS_URL = 'wss://rfq.ws.injective.network';
 export const RFQ_GRPC_WEB_URL = 'https://rfq.grpc-web.injective.network';
 export const RFQ_GATEWAY_URL = 'https://rfq.gateway.grpc-web.injective.network/';
-export const RFQ_CHAIN_ID = 'injective-1';
-export const RFQ_EVM_CHAIN_ID = 1776;
+export const RFQ_TIMING_PREFIX = '[RFQ-TIMING]';
 export const RFQ_COLLECT_QUOTES_MS = 500;
 export const RFQ_REQUEST_TIMEOUT_MS = 15_000;
 export const RFQ_PREQUOTE_INTERVAL_MS = 1_000;

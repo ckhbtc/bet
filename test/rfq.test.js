@@ -113,7 +113,7 @@ test('buildRfqOrderInput formats human RFQ decimals from market ticks', () => {
     market,
     oraclePrice: '100',
     side: 'long',
-    stakeUsdt: '50',
+    stakeUsdc: '50',
     leverage: '10',
     slippage: 0.01,
   });
@@ -185,7 +185,7 @@ test('buildRfqOrderInput rejects leverage above the market margin cap', () => {
     market: { ...market, symbol: 'DOT', initialMarginRatio: '0.083333' },
     oraclePrice: '100',
     side: 'long',
-    stakeUsdt: '50',
+    stakeUsdc: '50',
     leverage: '25',
     slippage: 0.01,
   }), /Selected aggressiveness is too high for DOT/);
@@ -196,7 +196,7 @@ test('buildRfqOrderInput rejects unsnapped raw market max leverage', () => {
     market: { ...market, symbol: 'BTC', initialMarginRatio: '0.019230769' },
     oraclePrice: '100',
     side: 'long',
-    stakeUsdt: '50',
+    stakeUsdc: '50',
     leverage: '52',
     slippage: 0,
   }), /Selected aggressiveness is too high for BTC/);
@@ -207,7 +207,7 @@ test('buildRfqOrderInput allows leverage within the market margin cap', () => {
     market: { ...market, symbol: 'DOT', initialMarginRatio: '0.083333' },
     oraclePrice: '100',
     side: 'long',
-    stakeUsdt: '50',
+    stakeUsdc: '50',
     leverage: '10',
     slippage: 0.01,
   });
@@ -233,7 +233,7 @@ test('buildRfqOrderInput caps max-leverage quantity against worst price initial 
     market: ethLikeMarket,
     oraclePrice: '1584.8',
     side: 'long',
-    stakeUsdt: '10',
+    stakeUsdc: '10',
     leverage: '50',
     slippage: 0.01,
   });
@@ -267,7 +267,7 @@ test('buildRfqOrderInput caps short max-leverage quantity above oracle for margi
     market: ethLikeMarket,
     oraclePrice: '100',
     side: 'short',
-    stakeUsdt: '10',
+    stakeUsdc: '10',
     leverage: '50',
     slippage: 0.01,
   });

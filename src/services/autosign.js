@@ -17,7 +17,7 @@ import {
   TxGrpcApi,
   ChainRestAuthApi,
 } from '@injectivelabs/sdk-ts';
-import { getNetworkEndpoints, getNetworkChainInfo, Network } from '@injectivelabs/networks';
+import { getNetworkEndpoints, getNetworkChainInfo } from '@injectivelabs/networks';
 import { ethers } from 'ethers';
 import {
   AUTHZ_SCOPE_VERSION,
@@ -25,10 +25,14 @@ import {
   buildRevokeMessages,
   GRANT_EXPIRATION_S,
 } from './authzMessages.js';
+import {
+  INJECTIVE_EVM_CHAIN_ID,
+  INJECTIVE_EVM_WALLET_CHAIN,
+  INJECTIVE_NETWORK,
+} from './injectiveNetwork.js';
 
-const NETWORK = Network.MainnetSentry;
-const endpoints = getNetworkEndpoints(NETWORK);
-const chainInfo = getNetworkChainInfo(NETWORK);
+const endpoints = getNetworkEndpoints(INJECTIVE_NETWORK);
+const chainInfo = getNetworkChainInfo(INJECTIVE_NETWORK);
 
 const authApi = new ChainRestAuthApi(endpoints.rest);
 const txApi = new TxGrpcApi(endpoints.grpc);
@@ -74,32 +78,26 @@ async function ensureInjectiveNetwork(onProgress) {
   if (!window.ethereum) throw new Error('No wallet detected');
 
   const currentChain = await window.ethereum.request({ method: 'eth_chainId' });
-  if (parseInt(currentChain, 16) !== 1776) {
+  if (parseInt(currentChain, 16) !== INJECTIVE_EVM_CHAIN_ID) {
     onProgress?.('Switching to Injective network...');
     try {
       await window.ethereum.request({
         method: 'wallet_switchEthereumChain',
-        params: [{ chainId: '0x6f0' }],
+        params: [{ chainId: INJECTIVE_EVM_WALLET_CHAIN.chainId }],
       });
     } catch {
       try {
         await window.ethereum.request({
           method: 'wallet_addEthereumChain',
-          params: [{
-            chainId: '0x6f0',
-            chainName: 'Injective',
-            nativeCurrency: { name: 'Injective', symbol: 'INJ', decimals: 18 },
-            rpcUrls: ['https://sentry.evm-rpc.injective.network/'],
-            blockExplorerUrls: ['https://blockscout.injective.network'],
-          }],
+          params: [INJECTIVE_EVM_WALLET_CHAIN],
         });
       } catch {
         // Some wallets reject the add but actually switch — verify below.
       }
     }
     const recheck = await window.ethereum.request({ method: 'eth_chainId' });
-    if (parseInt(recheck, 16) !== 1776) {
-      throw new Error('Please switch to Injective (chain ID 1776) in your wallet');
+    if (parseInt(recheck, 16) !== INJECTIVE_EVM_CHAIN_ID) {
+      throw new Error(`Please switch to Injective (chain ID ${INJECTIVE_EVM_CHAIN_ID}) in your wallet`);
     }
   }
 }

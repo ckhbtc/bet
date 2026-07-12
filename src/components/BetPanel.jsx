@@ -143,7 +143,7 @@ export default function BetPanel({
             market,
             oraclePrice: price,
             side,
-            stakeUsdt: stakeNum,
+            stakeUsdc: stakeNum,
             leverage: aggrConfig.leverage,
             slippage: RFQ_OPEN_SLIPPAGE,
           });

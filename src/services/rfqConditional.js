@@ -5,7 +5,7 @@ import {
   MsgExecuteContractCompat,
   getEthereumAddress,
 } from '@injectivelabs/sdk-ts';
-import { getNetworkEndpoints, Network } from '@injectivelabs/networks';
+import { getNetworkEndpoints } from '@injectivelabs/networks';
 import {
   RFQ_CHAIN_ID,
   RFQ_CONTRACT_ADDRESS,
@@ -20,9 +20,17 @@ import {
   RFQ_TPSL_TRIGGER,
 } from './rfqConstants.js';
 import { broadcastViaAuthz } from './trade.js';
+import {
+  canonicalDecimal,
+  humanPriceTick,
+  quantizeDecimal,
+} from './rfqMath.js';
+import {
+  INJECTIVE_EVM_WALLET_CHAIN,
+  INJECTIVE_NETWORK,
+} from './injectiveNetwork.js';
 
-const NETWORK = Network.MainnetSentry;
-const endpoints = getNetworkEndpoints(NETWORK);
+const endpoints = getNetworkEndpoints(INJECTIVE_NETWORK);
 const wasmApi = new ChainGrpcWasmApi(endpoints.grpc);
 const rfqApi = new IndexerGrpcRFQApi(RFQ_GRPC_WEB_URL);
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
@@ -77,26 +85,6 @@ function sleep(ms) {
 function scalarToString(value) {
   if (value === null || value === undefined) return '';
   return String(value);
-}
-
-function canonicalDecimal(value) {
-  const decimal = new Decimal(value);
-  if (!decimal.isFinite()) throw new Error(`Invalid decimal value: ${value}`);
-  const fixed = decimal.toFixed();
-  if (!fixed.includes('.')) return fixed;
-  return fixed.replace(/(\.\d*?)0+$/, '$1').replace(/\.$/, '') || '0';
-}
-
-function quantizeDecimal(value, tick, rounding = Decimal.ROUND_FLOOR) {
-  const decimal = new Decimal(value);
-  const minTick = new Decimal(tick || 0);
-  if (!decimal.isFinite()) throw new Error(`Invalid decimal value: ${value}`);
-  if (!minTick.isFinite() || minTick.lte(0)) return canonicalDecimal(decimal);
-  return canonicalDecimal(decimal.div(minTick).toDecimalPlaces(0, rounding).mul(minTick));
-}
-
-function humanPriceTick(minPriceTickSize) {
-  return new Decimal(minPriceTickSize || '1').div(1_000_000);
 }
 
 function readWasmJson(response) {
@@ -347,25 +335,19 @@ async function ensureInjectiveSigningChain() {
   try {
     await window.ethereum.request({
       method: 'wallet_switchEthereumChain',
-      params: [{ chainId: `0x${RFQ_EVM_CHAIN_ID.toString(16)}` }],
+      params: [{ chainId: INJECTIVE_EVM_WALLET_CHAIN.chainId }],
     });
   } catch (err) {
     if (err?.code !== 4902) throw err;
     await window.ethereum.request({
       method: 'wallet_addEthereumChain',
-      params: [{
-        chainId: `0x${RFQ_EVM_CHAIN_ID.toString(16)}`,
-        chainName: 'Injective',
-        nativeCurrency: { name: 'Injective', symbol: 'INJ', decimals: 18 },
-        rpcUrls: ['https://sentry.evm-rpc.injective.network/'],
-        blockExplorerUrls: ['https://tcx.inj.so/'],
-      }],
+      params: [INJECTIVE_EVM_WALLET_CHAIN],
     });
   }
 
   const recheck = await window.ethereum.request({ method: 'eth_chainId' });
   if (parseInt(recheck, 16) !== RFQ_EVM_CHAIN_ID) {
-    throw new Error('Please switch to Injective (chain ID 1776) in your wallet');
+    throw new Error(`Please switch to Injective (chain ID ${RFQ_EVM_CHAIN_ID}) in your wallet`);
   }
   return RFQ_EVM_CHAIN_ID;
 }

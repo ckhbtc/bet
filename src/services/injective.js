@@ -1,8 +1,3 @@
-/**
- * Injective read-only API calls — markets, prices, balances, positions.
- * Adapted from easyperps injective.ts.
- */
-
 import {
   IndexerGrpcDerivativesApi,
   IndexerGrpcOracleApi,
@@ -11,12 +6,20 @@ import {
   IndexerGrpcRFQApi,
   Address,
 } from '@injectivelabs/sdk-ts';
-import { getNetworkEndpoints, Network } from '@injectivelabs/networks';
+import { getNetworkEndpoints } from '@injectivelabs/networks';
 import Decimal from 'decimal.js';
 import { RFQ_GRPC_WEB_URL, RFQ_TPSL_TRIGGER } from './rfqConstants.js';
+import {
+  normalizePriceDecimals,
+  priceDecimalsFromTickSize,
+} from './pricePrecision.js';
+import {
+  INJECTIVE_NETWORK,
+  INJECTIVE_USDC_ADDRESS,
+  INJECTIVE_USDC_DENOM,
+} from './injectiveNetwork.js';
 
-const NETWORK = Network.MainnetSentry;
-const endpoints = getNetworkEndpoints(NETWORK);
+const endpoints = getNetworkEndpoints(INJECTIVE_NETWORK);
 
 const derivativesApi = new IndexerGrpcDerivativesApi(endpoints.indexer);
 const oracleApi = new IndexerGrpcOracleApi(endpoints.indexer);
@@ -26,27 +29,8 @@ const chronosDerivativesApi = new IndexerRestDerivativesChronosApi(`${endpoints.
 
 const QUOTE_DECIMALS = 6;
 const INJ_DECIMALS = 18;
-const USDC_QUOTE_DENOM = 'erc20:0xa00c59ff5a080d2b954d0c75e46e22a0c371235a';
 const BFF_DERIVATIVE_MARKETS_URL = 'https://bff-api.injective.network/api/v1/derivative/markets/tc?network=mainnet&marketStatus=active';
 
-function normalizePriceDecimals(decimals) {
-  const n = Number(decimals);
-  if (!Number.isFinite(n)) return null;
-  return Math.max(0, Math.min(12, Math.floor(n)));
-}
-
-function priceDecimalsFromTickSize(minPriceTickSize, quoteDecimals = QUOTE_DECIMALS) {
-  try {
-    const tick = new Decimal(minPriceTickSize || 0);
-    if (!tick.isFinite() || tick.lte(0)) return null;
-    return normalizePriceDecimals(tick.div(new Decimal(10).pow(quoteDecimals)).decimalPlaces());
-  } catch {
-    return null;
-  }
-}
-
-// ─── Token registry ──────────────────────────────────────────────────────────
-//
 // Peggy entries cover the legacy Ethereum-bridged stables.
 // ERC20 entries cover Injective-EVM-native tokens (the quote denom format
 // the exchange module uses for the new USDC perps is `erc20:<addr>`).
@@ -58,7 +42,7 @@ const PEGGY_REGISTRY = {
 };
 
 const ERC20_REGISTRY = {
-  '0xa00c59ff5a080d2b954d0c75e46e22a0c371235a': { symbol: 'USDC', decimals: 6 },
+  [INJECTIVE_USDC_ADDRESS.toLowerCase()]: { symbol: 'USDC', decimals: 6 },
   '0x88f7f2b685f9692caf8c478f5badf09ee9b1cc13': { symbol: 'USDT', decimals: 6 },
 };
 
@@ -74,8 +58,6 @@ function resolveDenom(denom) {
   }
   return null;
 }
-
-// ─── Markets cache ────────────────────────────────────────────────────────────
 
 let _marketsCache = null;
 let _marketsCacheTs = 0;
@@ -141,7 +123,7 @@ export function normalizeVerifiedDerivativeMarkets(payload) {
     const quoteDenom = String(m?.quoteDenom || m?.quoteToken?.denom || '').toLowerCase();
     const isUsdc =
       quoteSymbol === 'USDC' ||
-      quoteDenom === USDC_QUOTE_DENOM ||
+      quoteDenom === INJECTIVE_USDC_DENOM ||
       tickerUpper.includes('/USDC');
 
     if (m?.isVerified !== true) continue;
@@ -189,42 +171,32 @@ export async function fetchVerifiedDerivativeMarkets() {
   return markets;
 }
 
-export async function resolveMarket(symbol) {
-  const markets = await listMarkets();
-  const s = symbol.toUpperCase();
-  return markets.find(m =>
-    m.symbol.toUpperCase() === s ||
-    m.ticker.toUpperCase().startsWith(s + '/')
-  ) || null;
-}
-
-// ─── Oracle prices ────────────────────────────────────────────────────────────
-
-export async function fetchOraclePrice(market) {
-  try {
-    const result = await oracleApi.fetchOraclePrice({
-      baseSymbol: market.oracleBase,
-      quoteSymbol: market.oracleQuote,
-      oracleType: market.oracleType,
-    });
-    return result.price ? new Decimal(result.price).toNumber() : null;
-  } catch {
-    return null;
-  }
+async function fetchOraclePrice(market) {
+  const result = await oracleApi.fetchOraclePrice({
+    baseSymbol: market.oracleBase,
+    quoteSymbol: market.oracleQuote,
+    oracleType: market.oracleType,
+  });
+  return result.price ? new Decimal(result.price).toNumber() : null;
 }
 
 export async function fetchAllPrices(markets) {
   const prices = {};
-  const pricePromises = markets.map(async (m) => {
-    const price = await fetchOraclePrice(m);
-    if (price) prices[m.marketId] = price;
-  });
-  await Promise.allSettled(pricePromises);
+  const results = await Promise.allSettled(markets.map(async (market) => ({
+    market,
+    price: await fetchOraclePrice(market),
+  })));
+
+  for (const result of results) {
+    if (result.status === 'fulfilled') {
+      if (result.value.price) prices[result.value.market.marketId] = result.value.price;
+      continue;
+    }
+    console.warn('Failed to fetch an oracle price:', result.reason);
+  }
   return prices;
 }
 
-// ─── 24h market summary (price, open, change) ─────────────────────────────────
-//
 // Returns a Map keyed by marketId with { price, open, change24hPct } —
 // change24hPct is a percentage (e.g. -1.32 = -1.32%) computed from open/price
 // so the value is unambiguous regardless of how the SDK's `.change` field
@@ -252,14 +224,11 @@ export async function fetchMarketsSummary() {
   }
 }
 
-// ─── Balances ────────────────────────────────────────────────────────────────
-
 export async function fetchBalances(injAddress) {
   const portfolio = await portfolioApi.fetchAccountPortfolioBalances(injAddress);
 
   const result = { bank: [], subaccount: [], usdcTotal: 0 };
 
-  // Bank balances
   for (const b of portfolio.bankBalancesList || []) {
     const token = resolveDenom(b.denom || '');
     if (!token) continue;
@@ -270,7 +239,6 @@ export async function fetchBalances(injAddress) {
     }
   }
 
-  // Subaccount balances
   for (const s of portfolio.subaccountsList || []) {
     const token = resolveDenom(s.denom || '');
     if (!token) continue;
@@ -284,8 +252,6 @@ export async function fetchBalances(injAddress) {
   return result;
 }
 
-// ─── Positions ────────────────────────────────────────────────────────────────
-
 export function normalizePositionQuantityForClose(quantity) {
   const decimal = new Decimal(quantity || '0');
   return decimal.isFinite() ? decimal.toFixed() : '0';
@@ -297,8 +263,14 @@ export async function fetchPositions(injAddress) {
 
   const [posRes, ordersRes, rfqOrdersRes] = await Promise.all([
     derivativesApi.fetchPositionsV2({ address: injAddress }),
-    fetchOpenOrders(injAddress).catch(() => ({ orders: [] })),
-    fetchRfqConditionalOrders(injAddress).catch(() => ({ orders: [] })),
+    fetchOpenOrders(injAddress).catch((err) => {
+      console.warn('Failed to fetch reduce-only orders for positions:', err);
+      return { orders: [] };
+    }),
+    fetchRfqConditionalOrders(injAddress).catch((err) => {
+      console.warn('Failed to fetch RFQ conditional orders for positions:', err);
+      return { orders: [] };
+    }),
   ]);
 
   const SCALE = new Decimal(10).pow(QUOTE_DECIMALS);
@@ -377,8 +349,6 @@ export async function fetchPositions(injAddress) {
   }
   return result;
 }
-
-// ─── Open orders (used to surface TP per position) ────────────────────────────
 
 async function fetchOpenOrders(injAddress) {
   const ethAddress = Address.fromBech32(injAddress).toHex();

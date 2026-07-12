@@ -89,7 +89,6 @@ export default function App() {
     return localStorage.getItem('bet-dev-mode') === '1';
   });
 
-  // Sync theme to <html data-theme> + localStorage
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     try { localStorage.setItem('bet-theme', theme); } catch { /* ignore */ }
@@ -222,7 +221,6 @@ export default function App() {
     };
   }, [connected, injAddress, session.rfqReady, view, positions]);
 
-  // Start polling when wallet connects
   useEffect(() => {
     if (connected && injAddress) {
       startPolling(injAddress);
@@ -290,7 +288,7 @@ export default function App() {
         granterAddress: injAddress,
         marketId: bet.market.marketId,
         side: bet.direction === 'up' ? 'long' : 'short',
-        stakeUsdt: bet.stake,
+        stakeUsdc: bet.stake,
         leverage: bet.leverage,
         tpPrice: bet.targetPrice,
         market: bet.market,
